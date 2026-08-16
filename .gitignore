@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Local backups exported from the Grown-ups panel.
+# These contain real children's names and routines — never commit them.
+*backup*.json
+*-backup.json
+backups/
+private/
+
+# Private codes file — per the playbook, never in the repo
+codes*.txt
+*-codes.md
+
+# Working copies
+*.bak
+*.orig
+index-v*.html
+*-draft.html
+
+# Artifact of a failed git init through the Cowork mount (16 Aug).
+# Safe to delete the folder itself in Finder.
+_BROKEN-git-DELETE-ME/
