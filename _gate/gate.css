@@ -1,0 +1,26 @@
+
+/* ---------- trial / licence gate ---------- */
+#gateWrap{position:fixed;inset:0;z-index:9999;background:var(--paper);overflow:auto;display:none;padding:24px 16px 40px}
+#gateWrap.on{display:block}
+.gateCard{max-width:520px;margin:0 auto;background:var(--card);border:3px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:26px 22px}
+.gateCard h2{font-family:var(--display);font-size:1.6rem;margin:0 0 6px;line-height:1.15}
+.gateCard p{margin:0 0 14px;color:var(--ink-soft);line-height:1.5}
+.gateCard .lede{color:var(--ink);font-size:1.05rem}
+.gateLogo{font-family:var(--display);font-size:.8rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:10px}
+.gBtn{display:block;width:100%;box-sizing:border-box;text-align:center;font-family:var(--display);font-size:1.1rem;padding:15px 18px;border-radius:14px;border:3px solid var(--line);background:var(--morning);color:#2B2436;text-decoration:none;box-shadow:var(--shadow);cursor:pointer;margin:16px 0 10px}
+.gBtn.sec{background:var(--card);font-size:1rem;padding:12px}
+.gPrice{font-family:var(--display);font-size:2.1rem;margin:2px 0 0}
+.gPrice small{font-size:.95rem;color:var(--ink-soft);font-family:var(--body)}
+.gList{margin:12px 0 0;padding:0;list-style:none}
+.gList li{padding:5px 0 5px 26px;position:relative;color:var(--ink)}
+.gList li:before{content:"✓";position:absolute;left:0;color:var(--after);font-weight:700}
+.gDiv{border:0;border-top:2px dashed #d8d2e4;margin:22px 0 18px}
+.gSmall{font-size:.86rem;color:var(--ink-soft)}
+.gCode{width:100%;box-sizing:border-box;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:1rem;letter-spacing:.06em;padding:12px;border:2px solid var(--line);border-radius:10px;text-transform:uppercase}
+.gMsg{margin-top:10px;font-size:.9rem;min-height:1.2em}
+.gMsg.err{color:#C2354F}.gMsg.ok{color:#1E8C63}
+.gFoot{max-width:520px;margin:18px auto 0;text-align:center;font-size:.82rem;color:var(--ink-soft);line-height:1.7}
+.gFoot a{color:var(--ink-soft)}
+#trialBar{display:none;text-align:center;font-size:.85rem;padding:7px 12px;background:#FFF4D8;border-bottom:2px solid var(--line);color:#6b5a1f}
+#trialBar.on{display:block}
+#trialBar a{color:#6b5a1f;font-weight:700}
