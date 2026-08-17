@@ -4,14 +4,28 @@
    so launch day is a one-line change, not a code change.            */
 const BUY = {
   checkout : '',      // <- Lemon Squeezy checkout URL, $40/year
-  upgrade  : '',      // <- same checkout + ?checkout[discount_code]=RETURNING  ($25)
+  upgrade  : '',      // <- the $25 returning-customer checkout. NOT shown publicly — see below.
   bundle   : '',      // <- $89 all three
   email    : 'MuslimeenMarket@gmail.com',
   price    : '$40',
   upgPrice : '$25',
-  upgCode  : 'RETURNING',
+  siblings : 'Spelling Quest or One Ayah At A Time',
   trialDays: 7
 };
+
+/* ---------------------------------------------------------------
+   WHY THE $25 PRICE IS NOT A CODE PRINTED ON THIS SCREEN.
+
+   A discount code shown to everyone is a price cut for everyone —
+   anyone reading it just pays $25 instead of $40, and the same is
+   true of a separate "Upgrade" product left on the storefront:
+   nothing at checkout knows whether the buyer already owns another
+   app. Neither mechanism can verify ownership.
+
+   So the $25 is delivered, not advertised: it goes out in the
+   purchase and renewal emails for the other apps, and to anyone who
+   writes in. This screen says the price exists and how to get it.
+   --------------------------------------------------------------- */
 
 /* ---------------------------------------------------------------
    WHICH KEYS THIS APP ACCEPTS.
@@ -151,8 +165,9 @@ function screenExpired(){
     <li>A year of updates</li>
   </ul>
   ${buyButton('Unlock for a year','checkout')}
-  <p class="gSmall" style="text-align:center">Already have another Muslimeen Market app? Use code
-    <strong>${BUY.upgCode}</strong> at checkout and it's ${BUY.upgPrice}.</p>
+  <p class="gSmall" style="text-align:center">Already have ${BUY.siblings}? It's ${BUY.upgPrice} to add
+    this one — your code is in your welcome email, or <a href="mailto:${BUY.email}?subject=${
+    encodeURIComponent('Upgrade code please')}">ask us</a> and we'll send it.</p>
   <hr class="gDiv">
   <p class="gSmall">Already bought it? Paste the code from your purchase email.</p>
   <input class="gCode" id="gKey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
@@ -174,7 +189,7 @@ function screenCode(){
 function wireGate(){
   const s=id=>document.getElementById(id);
   const m=s('gMail'); if(m) m.href='mailto:'+BUY.email;
-  if(s('gStart')) s('gStart').onclick=e=>{e.preventDefault();startTrial();gateInit();};
+  if(s('gStart')) s('gStart').onclick=e=>{e.preventDefault();startTrial();gateInit();startTour();};
   if(s('gHaveCode')) s('gHaveCode').onclick=e=>{e.preventDefault();showGate(screenCode());};
   if(s('gBack')) s('gBack').onclick=e=>{e.preventDefault();gateInit();};
   if(s('gUnlock')) s('gUnlock').onclick=async()=>{
@@ -202,7 +217,7 @@ function wireGate(){
           checked: Date.now()
         });
         msg.className='gMsg ok'; msg.textContent='Unlocked. Enjoy!';
-        setTimeout(gateInit,700);
+        setTimeout(()=>{ gateInit(); startTour(); },700);
       }else if(st==='expired'){
         msg.className='gMsg err'; msg.textContent='That code has expired. Renew and it will work again.';
       }else{
@@ -215,7 +230,37 @@ function wireGate(){
   };
 }
 
+/* ---------------------------------------------------------------
+   TEST SWITCH.
+
+   There is no console on an iPad, so without this there is no way to
+   reach the expired screen or replay the walkthrough on the device
+   that actually matters. Append to the URL:
+
+     ?gate=reset    clear the trial and any stored code — back to the
+                    welcome screen
+     ?gate=trial    start the trial as if it began today
+     ?gate=expired  jump straight to the expired screen (this one is
+                    not stored; reload and it's gone)
+     ?tour=1        replay the walkthrough
+
+   None of these grant access. `reset` only takes access away, and it
+   does nothing a parent couldn't already do from Settings → clear
+   website data — which is also why the trial is a speed bump and not
+   a lock, by design.
+   --------------------------------------------------------------- */
+function gateSwitch(){
+  const q=new URLSearchParams((location.search||'')+'&'+(location.hash||'').replace(/^#/,''));
+  const g=q.get('gate');
+  if(g==='reset'){ try{ localStorage.removeItem(TKEY); localStorage.removeItem(LKEY); localStorage.removeItem(TOURKEY); }catch(e){} }
+  if(g==='trial'){ startTrial(); }
+  if(q.get('tour')==='1'){ setTimeout(()=>startTour(true),500); }
+  return g;
+}
+
 function gateInit(){
+  if(gateInit._sw===undefined) gateInit._sw=gateSwitch();
+  if(gateInit._sw==='expired'){ $('trialBar').classList.remove('on'); showGate(screenExpired()); return; }
   const L=licState();
   if(L.state==='ok'){ hideGate(); $('trialBar').classList.remove('on'); if(L.stale) refreshLic(L.lic); return; }
   const t=trialInfo();

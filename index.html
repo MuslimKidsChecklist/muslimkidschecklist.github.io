@@ -204,6 +204,35 @@ body{background:var(--paper);background-image:radial-gradient(var(--card) 1.5px,
 #trialBar.on{display:block}
 #trialBar a{color:#6b5a1f;font-weight:700}
 
+/* ---------- first-run walkthrough ---------- */
+/* The spotlight is one box with a very large outer shadow — that is what
+   dims everything except the target. Works in iOS Safari and in a Home
+   Screen web app, where dialogs do not.                                   */
+#tourSpot{position:fixed;z-index:10000;border-radius:16px;pointer-events:none;
+  box-shadow:0 0 0 9999px rgba(28,22,38,.66);border:3px solid #FFF;
+  transition:top .28s ease,left .28s ease,width .28s ease,height .28s ease;display:none}
+#tourSpot.on{display:block}
+#tourSpot.noTarget{box-shadow:0 0 0 9999px rgba(28,22,38,.66);border:0;width:0;height:0}
+
+/* Catches taps so nothing behind the tour can be pressed by accident. */
+#tourBlock{position:fixed;inset:0;z-index:10000;display:none}
+#tourBlock.on{display:block}
+
+#tourCard{position:fixed;z-index:10001;max-width:330px;width:calc(100% - 32px);
+  background:var(--card);border:3px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:16px 18px 14px;display:none}
+#tourCard.on{display:block}
+#tourCard h3{font-family:var(--display);font-size:1.15rem;margin:0 0 6px;line-height:1.2}
+#tourCard p{margin:0;color:var(--ink-soft);font-size:.94rem;line-height:1.5}
+.tourFoot{display:flex;align-items:center;gap:10px;margin-top:14px}
+.tourDots{display:flex;gap:5px;margin-right:auto}
+.tourDots i{width:7px;height:7px;border-radius:50%;background:#D6D0E2;display:block}
+.tourDots i.on{background:var(--bed)}
+.tourBtn{font-family:var(--display);font-size:.95rem;padding:9px 16px;border-radius:11px;
+  border:3px solid var(--line);background:var(--morning);color:#2B2436;cursor:pointer;
+  box-shadow:2px 2px 0 var(--line)}
+.tourSkip{background:none;border:0;color:var(--ink-soft);font-size:.85rem;cursor:pointer;
+  text-decoration:underline;padding:9px 2px}
 </style>
 </head>
 <body>
@@ -262,6 +291,7 @@ body{background:var(--paper);background-image:radial-gradient(var(--card) 1.5px,
       <div style="width:100%;display:flex;gap:8px;flex-wrap:wrap">
         <button class="mini" id="btnBackup">Save a backup</button>
         <button class="mini" id="btnRestore">Restore a backup</button>
+        <button class="mini" id="btnTour">Show me around again</button>
       </div>
     </div>
     <div class="panel-body">
@@ -452,7 +482,15 @@ function backupCfg(){ try{ localStorage.setItem(LCFG, JSON.stringify(cfg)); }cat
 function localCfg(){ try{ const r=localStorage.getItem(LCFG); if(!r) return null;
   const c=JSON.parse(r); return (c&&c.kids&&c.kids.length)?c:null; }catch(e){ return null; } }
 
+/* The artifact runtime supplies window.storage; a plain web page does not.
+   Without this check the app spends ~1.8s retrying an API that will never
+   appear, showing a blank board, and then retries a failing write every 15
+   seconds forever with the status stuck on "queued". Everything still saves
+   to localStorage either way — that path is untouched.                    */
+const HAS_CLOUD = !!(typeof window!=='undefined' && window.storage && typeof window.storage.get==='function');
+
 async function readRaw(k, shared){
+  if(!HAS_CLOUD) return {ok:false, value:null};
   try{ const r=await window.storage.get(k, shared); return {ok:true, value:(r&&r.value)?r.value:null}; }
   catch(e){ return {ok:false, value:null}; }
 }
@@ -472,7 +510,7 @@ function pruneOldWeeks(){
 
 async function load(){
   let r = await readRaw(GK,true);
-  for(let i=0;i<2 && !r.ok;i++){                      // shared storage is flaky — give it a couple of tries
+  for(let i=0;i<2 && !r.ok && HAS_CLOUD;i++){         // shared storage is flaky — give it a couple of tries
     await new Promise(res=>setTimeout(res, 600*(i+1)));
     r = await readRaw(GK,true);
   }
@@ -525,6 +563,9 @@ function schedule(){
 async function flush(){
   timer=null;
   if(writing||(!dirty&&!cfgDirty)) return;
+  if(!HAS_CLOUD){                                   // saved to this device already; nothing to sync to
+    dirty=false; cfgDirty=false; lastWrite=Date.now(); setSync('saved'); return;
+  }
   writing=true;
   const wantCfg=cfgDirty && !cfgLocked; if(wantCfg) cfgDirty=false; dirty=false;
   try{
@@ -1105,19 +1146,178 @@ $('btnDefaults').onclick=()=>{
 load();
 
 
+/* ================= first-run walkthrough =================
+   Runs once, after the trial starts or a code is entered. Five steps, each
+   one anchored to a real control. It is skippable at every step and it
+   never blocks the app — if a step's target is missing (a different child
+   count, a narrow screen), that step is dropped rather than pointing at
+   nothing.
+
+   Deliberately no confirm()/alert()/window.open(): a Home Screen web app
+   on iOS swallows all three silently.                                     */
+
+const TOURKEY = 'mkc:tour';
+
+const TOUR_STEPS = [
+  { sel : null,
+    title: 'Twenty seconds and you know the whole thing',
+    body : "Every job here is a picture. That is the whole idea — your child can use this before they can read a word of it." },
+
+  { sel : '#board .tile',
+    title: 'Tap a picture to check it off',
+    body : 'Tap it again to undo. Checks clear on their own each week, so nothing needs resetting.' },
+
+  { sel : '#btnWeek',
+    title: 'Whole week, or one day',
+    body : 'One day is the calm view for a young child. Whole week shows the full grid — better for you, and for older children.' },
+
+  { sel : '#btnParent',
+    title: 'Make it yours in here',
+    body : 'Everything on screen right now is just an example. Grown-ups is where you add your own children and pick their tasks.' },
+
+  { sel : null,
+    title: 'Add this to your Home Screen',
+    body : 'Please do this one. iPads clear website data after about a week of not visiting, and the Home Screen copy is what keeps your setup safe. Share → Add to Home Screen.' }
+];
+
+let tourAt = 0, tourList = [], tourOnResize = null;
+
+const tourSeen  = () => { try { return localStorage.getItem(TOURKEY) === '1'; } catch (e) { return false; } };
+const tourMark  = () => { try { localStorage.setItem(TOURKEY, '1'); } catch (e) {} };
+
+function tourEls(){
+  let b = document.getElementById('tourBlock');
+  if (!b){
+    b = document.createElement('div'); b.id = 'tourBlock'; document.body.appendChild(b);
+    const s = document.createElement('div'); s.id = 'tourSpot'; document.body.appendChild(s);
+    const c = document.createElement('div'); c.id = 'tourCard'; document.body.appendChild(c);
+  }
+  return {
+    block: document.getElementById('tourBlock'),
+    spot : document.getElementById('tourSpot'),
+    card : document.getElementById('tourCard')
+  };
+}
+
+function tourPlace(step){
+  const { spot, card } = tourEls();
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const target = step.sel ? document.querySelector(step.sel) : null;
+
+  if (target){
+    const r = target.getBoundingClientRect();
+    const pad = 8;
+    spot.classList.remove('noTarget');
+    spot.style.top    = Math.max(4, r.top  - pad) + 'px';
+    spot.style.left   = Math.max(4, r.left - pad) + 'px';
+    spot.style.width  = Math.min(vw - 8, r.width  + pad * 2) + 'px';
+    spot.style.height = Math.min(vh - 8, r.height + pad * 2) + 'px';
+
+    /* Put the card on whichever side of the target has more room. */
+    const below = vh - r.bottom, above = r.top;
+    card.style.left = Math.min(Math.max(12, r.left), vw - card.offsetWidth - 12) + 'px';
+    card.style.top  = (below >= above)
+      ? Math.min(r.bottom + 16, vh - card.offsetHeight - 12) + 'px'
+      : Math.max(12, r.top - card.offsetHeight - 16) + 'px';
+  } else {
+    spot.classList.add('noTarget');
+    spot.style.top = '50%'; spot.style.left = '50%';
+    spot.style.width = '0px'; spot.style.height = '0px';
+    card.style.left = Math.max(12, (vw - card.offsetWidth) / 2) + 'px';
+    card.style.top  = Math.max(12, (vh - card.offsetHeight) / 2) + 'px';
+  }
+}
+
+function tourShow(){
+  const { block, spot, card } = tourEls();
+  const step = tourList[tourAt];
+  if (!step){ tourEnd(); return; }
+
+  const last = tourAt === tourList.length - 1;
+  card.innerHTML =
+    '<h3>' + step.title + '</h3><p>' + step.body + '</p>' +
+    '<div class="tourFoot"><div class="tourDots">' +
+      tourList.map((_, i) => '<i class="' + (i === tourAt ? 'on' : '') + '"></i>').join('') +
+    '</div>' +
+    (last ? '' : '<button class="tourSkip" id="tourSkip">Skip</button>') +
+    '<button class="tourBtn" id="tourNext">' + (last ? 'Got it' : 'Next') + '</button></div>';
+
+  block.classList.add('on'); spot.classList.add('on'); card.classList.add('on');
+
+  const t = step.sel ? document.querySelector(step.sel) : null;
+  if (t && t.scrollIntoView) t.scrollIntoView({ block: 'center', behavior: 'auto' });
+  tourPlace(step);
+  requestAnimationFrame(() => tourPlace(step));
+
+  const next = document.getElementById('tourNext');
+  if (next) next.onclick = () => { tourAt++; tourShow(); };
+  const skip = document.getElementById('tourSkip');
+  if (skip) skip.onclick = tourEnd;
+}
+
+function tourEnd(){
+  const { block, spot, card } = tourEls();
+  block.classList.remove('on'); spot.classList.remove('on'); card.classList.remove('on');
+  if (tourOnResize){
+    window.removeEventListener('resize', tourOnResize);
+    window.removeEventListener('scroll', tourOnResize);
+    tourOnResize = null;
+  }
+  tourMark();
+}
+
+/* force = the "Show me around again" button, which ignores the seen flag. */
+function startTour(force){
+  if (!force && tourSeen()) return;
+
+  /* Wait for the board to actually contain tiles before measuring anything.
+     load() is async, so on a slow device the trial can start before a single
+     task has been drawn — and a step whose target does not exist yet gets
+     dropped, which is how the most important step in the tour ("tap a
+     picture") silently went missing the first time this was built.          */
+  let tries = 0;
+  (function ready(){
+    if (!document.querySelector('#board .tile') && tries++ < 40){
+      setTimeout(ready, 150); return;
+    }
+    /* Drop any step whose target is still absent rather than spotlighting nothing. */
+    tourList = TOUR_STEPS.filter(s => !s.sel || document.querySelector(s.sel));
+    if (!tourList.length) return;
+    tourAt = 0;
+    tourOnResize = () => tourPlace(tourList[tourAt]);
+    window.addEventListener('resize', tourOnResize);
+    window.addEventListener('scroll', tourOnResize, { passive: true });
+    tourShow();
+  })();
+}
+
 /* ================= trial + license gate =================
    Phase 6 pattern: the buy button resolves its destination when tapped,
    so launch day is a one-line change, not a code change.            */
 const BUY = {
   checkout : '',      // <- Lemon Squeezy checkout URL, $40/year
-  upgrade  : '',      // <- same checkout + ?checkout[discount_code]=RETURNING  ($25)
+  upgrade  : '',      // <- the $25 returning-customer checkout. NOT shown publicly — see below.
   bundle   : '',      // <- $89 all three
   email    : 'MuslimeenMarket@gmail.com',
   price    : '$40',
   upgPrice : '$25',
-  upgCode  : 'RETURNING',
+  siblings : 'Spelling Quest or One Ayah At A Time',
   trialDays: 7
 };
+
+/* ---------------------------------------------------------------
+   WHY THE $25 PRICE IS NOT A CODE PRINTED ON THIS SCREEN.
+
+   A discount code shown to everyone is a price cut for everyone —
+   anyone reading it just pays $25 instead of $40, and the same is
+   true of a separate "Upgrade" product left on the storefront:
+   nothing at checkout knows whether the buyer already owns another
+   app. Neither mechanism can verify ownership.
+
+   So the $25 is delivered, not advertised: it goes out in the
+   purchase and renewal emails for the other apps, and to anyone who
+   writes in. This screen says the price exists and how to get it.
+   --------------------------------------------------------------- */
 
 /* ---------------------------------------------------------------
    WHICH KEYS THIS APP ACCEPTS.
@@ -1257,8 +1457,9 @@ function screenExpired(){
     <li>A year of updates</li>
   </ul>
   ${buyButton('Unlock for a year','checkout')}
-  <p class="gSmall" style="text-align:center">Already have another Muslimeen Market app? Use code
-    <strong>${BUY.upgCode}</strong> at checkout and it's ${BUY.upgPrice}.</p>
+  <p class="gSmall" style="text-align:center">Already have ${BUY.siblings}? It's ${BUY.upgPrice} to add
+    this one — your code is in your welcome email, or <a href="mailto:${BUY.email}?subject=${
+    encodeURIComponent('Upgrade code please')}">ask us</a> and we'll send it.</p>
   <hr class="gDiv">
   <p class="gSmall">Already bought it? Paste the code from your purchase email.</p>
   <input class="gCode" id="gKey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
@@ -1280,7 +1481,7 @@ function screenCode(){
 function wireGate(){
   const s=id=>document.getElementById(id);
   const m=s('gMail'); if(m) m.href='mailto:'+BUY.email;
-  if(s('gStart')) s('gStart').onclick=e=>{e.preventDefault();startTrial();gateInit();};
+  if(s('gStart')) s('gStart').onclick=e=>{e.preventDefault();startTrial();gateInit();startTour();};
   if(s('gHaveCode')) s('gHaveCode').onclick=e=>{e.preventDefault();showGate(screenCode());};
   if(s('gBack')) s('gBack').onclick=e=>{e.preventDefault();gateInit();};
   if(s('gUnlock')) s('gUnlock').onclick=async()=>{
@@ -1308,7 +1509,7 @@ function wireGate(){
           checked: Date.now()
         });
         msg.className='gMsg ok'; msg.textContent='Unlocked. Enjoy!';
-        setTimeout(gateInit,700);
+        setTimeout(()=>{ gateInit(); startTour(); },700);
       }else if(st==='expired'){
         msg.className='gMsg err'; msg.textContent='That code has expired. Renew and it will work again.';
       }else{
@@ -1321,7 +1522,37 @@ function wireGate(){
   };
 }
 
+/* ---------------------------------------------------------------
+   TEST SWITCH.
+
+   There is no console on an iPad, so without this there is no way to
+   reach the expired screen or replay the walkthrough on the device
+   that actually matters. Append to the URL:
+
+     ?gate=reset    clear the trial and any stored code — back to the
+                    welcome screen
+     ?gate=trial    start the trial as if it began today
+     ?gate=expired  jump straight to the expired screen (this one is
+                    not stored; reload and it's gone)
+     ?tour=1        replay the walkthrough
+
+   None of these grant access. `reset` only takes access away, and it
+   does nothing a parent couldn't already do from Settings → clear
+   website data — which is also why the trial is a speed bump and not
+   a lock, by design.
+   --------------------------------------------------------------- */
+function gateSwitch(){
+  const q=new URLSearchParams((location.search||'')+'&'+(location.hash||'').replace(/^#/,''));
+  const g=q.get('gate');
+  if(g==='reset'){ try{ localStorage.removeItem(TKEY); localStorage.removeItem(LKEY); localStorage.removeItem(TOURKEY); }catch(e){} }
+  if(g==='trial'){ startTrial(); }
+  if(q.get('tour')==='1'){ setTimeout(()=>startTour(true),500); }
+  return g;
+}
+
 function gateInit(){
+  if(gateInit._sw===undefined) gateInit._sw=gateSwitch();
+  if(gateInit._sw==='expired'){ $('trialBar').classList.remove('on'); showGate(screenExpired()); return; }
   const L=licState();
   if(L.state==='ok'){ hideGate(); $('trialBar').classList.remove('on'); if(L.stale) refreshLic(L.lic); return; }
   const t=trialInfo();
@@ -1339,6 +1570,8 @@ function gateInit(){
   $('trialBar').classList.remove('on');
   showGate(screenExpired());
 }
+
+if($('btnTour')) $('btnTour').onclick=()=>{ $('sheet').classList.remove('on'); startTour(true); };
 
 gateInit();
 </script>

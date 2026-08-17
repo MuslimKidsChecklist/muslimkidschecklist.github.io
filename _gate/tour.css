@@ -1,0 +1,29 @@
+/* ---------- first-run walkthrough ---------- */
+/* The spotlight is one box with a very large outer shadow — that is what
+   dims everything except the target. Works in iOS Safari and in a Home
+   Screen web app, where dialogs do not.                                   */
+#tourSpot{position:fixed;z-index:10000;border-radius:16px;pointer-events:none;
+  box-shadow:0 0 0 9999px rgba(28,22,38,.66);border:3px solid #FFF;
+  transition:top .28s ease,left .28s ease,width .28s ease,height .28s ease;display:none}
+#tourSpot.on{display:block}
+#tourSpot.noTarget{box-shadow:0 0 0 9999px rgba(28,22,38,.66);border:0;width:0;height:0}
+
+/* Catches taps so nothing behind the tour can be pressed by accident. */
+#tourBlock{position:fixed;inset:0;z-index:10000;display:none}
+#tourBlock.on{display:block}
+
+#tourCard{position:fixed;z-index:10001;max-width:330px;width:calc(100% - 32px);
+  background:var(--card);border:3px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:16px 18px 14px;display:none}
+#tourCard.on{display:block}
+#tourCard h3{font-family:var(--display);font-size:1.15rem;margin:0 0 6px;line-height:1.2}
+#tourCard p{margin:0;color:var(--ink-soft);font-size:.94rem;line-height:1.5}
+.tourFoot{display:flex;align-items:center;gap:10px;margin-top:14px}
+.tourDots{display:flex;gap:5px;margin-right:auto}
+.tourDots i{width:7px;height:7px;border-radius:50%;background:#D6D0E2;display:block}
+.tourDots i.on{background:var(--bed)}
+.tourBtn{font-family:var(--display);font-size:.95rem;padding:9px 16px;border-radius:11px;
+  border:3px solid var(--line);background:var(--morning);color:#2B2436;cursor:pointer;
+  box-shadow:2px 2px 0 var(--line)}
+.tourSkip{background:none;border:0;color:var(--ink-soft);font-size:.85rem;cursor:pointer;
+  text-decoration:underline;padding:9px 2px}
