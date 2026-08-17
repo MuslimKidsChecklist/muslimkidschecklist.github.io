@@ -1,15 +1,37 @@
 
-/* ================= trial + licence gate =================
+/* ================= trial + license gate =================
    Phase 6 pattern: the buy button resolves its destination when tapped,
    so launch day is a one-line change, not a code change.            */
 const BUY = {
   checkout : '',      // <- Lemon Squeezy checkout URL, $40/year
-  upgrade  : '',      // <- $25 upgrade for existing customers
+  upgrade  : '',      // <- same checkout + ?checkout[discount_code]=RETURNING  ($25)
   bundle   : '',      // <- $89 all three
   email    : 'MuslimeenMarket@gmail.com',
   price    : '$40',
+  upgPrice : '$25',
+  upgCode  : 'RETURNING',
   trialDays: 7
 };
+
+/* ---------------------------------------------------------------
+   WHICH KEYS THIS APP ACCEPTS.
+
+   One Lemon Squeezy store will hold three products. Asking the API
+   "is this key valid?" and nothing else means a Spelling Quest key
+   unlocks this app, because it IS a valid key from this store.
+
+   /v1/licenses/validate returns meta.product_id and meta.variant_id.
+   List the LIVE product ids this app is entitled to: itself, and the
+   three-app bundle. Live and test mode issue DIFFERENT ids — put the
+   LIVE ones here, or paying customers get turned away.
+
+   Leave the array empty and the check is skipped, so the gate still
+   works before launch. It must NOT ship empty.
+   --------------------------------------------------------------- */
+const ALLOWED_PRODUCTS = [
+  // <- Muslim Kids Checklist — Family Access   (live product_id)
+  // <- Muslimeen Market — All Three            (live product_id)
+];
 const TKEY='mkc:trial', LKEY='mkc:lic';
 const DAY=86400000;
 
@@ -28,7 +50,7 @@ function buyButton(label, kind){
   return `<a class="gBtn" href="${t.href}"${t.ext?' target="_blank" rel="noopener"':''}>${label}</a>`;
 }
 
-/* ---- licence ---- */
+/* ---- license ---- */
 async function checkKey(key){
   const r=await fetch('https://api.lemonsqueezy.com/v1/licenses/validate',{
     method:'POST',
@@ -38,7 +60,30 @@ async function checkKey(key){
   if(!r.ok) throw new Error('http '+r.status);
   return r.json();
 }
-const normKey=s=>(s||'').toUpperCase().replace(/[^A-Z0-9-]/g,'');
+
+/* Lemon Squeezy keys are lowercase UUIDs. iOS autocapitalization and a parent
+   retyping from a printout both mangle case, so try the sensible variants
+   rather than telling a paying customer their code is wrong. */
+const normKey=s=>(s||'').trim().replace(/\s+/g,'').replace(/[^A-Za-z0-9-]/g,'');
+async function checkKeyLoose(raw){
+  const k=normKey(raw);
+  const tries=[...new Set([k, k.toLowerCase(), k.toUpperCase()])];
+  let last=null;
+  for(const t of tries){
+    const d=await checkKey(t);
+    if(d && d.valid) return {data:d, key:t};
+    last=d;
+  }
+  return {data:last, key:k};
+}
+
+/* Does this key belong to THIS app? */
+function productOK(d){
+  if(!ALLOWED_PRODUCTS.length) return true;          // pre-launch escape hatch
+  const pid = d && d.meta && d.meta.product_id;
+  if(pid==null) return false;                        // can't prove it — don't grant
+  return ALLOWED_PRODUCTS.some(a=>String(a)===String(pid));
+}
 
 function licState(){
   const l=lread(LKEY);
@@ -52,10 +97,17 @@ async function refreshLic(l){
   try{
     const d=await checkKey(l.key);
     const st=d && d.license_key && d.license_key.status;
+    const pid=(d && d.meta && d.meta.product_id)||null;
+    /* Only a definitive wrong-product answer revokes. A network failure,
+       a 5xx, or a response with no meta leaves access exactly as it was. */
+    if(d && d.valid && pid!=null && !productOK(d)){
+      lwrite(LKEY,null);
+      return;
+    }
     if(d && d.valid===false && st && st!=='active'){
-      lwrite(LKEY,{...l,status:st,expires:(d.license_key.expires_at||l.expires),checked:Date.now()});
+      lwrite(LKEY,{...l,status:st,expires:(d.license_key.expires_at||l.expires),product:pid||l.product,checked:Date.now()});
     }else{
-      lwrite(LKEY,{...l,status:st||'active',expires:(d.license_key&&d.license_key.expires_at)||l.expires,checked:Date.now()});
+      lwrite(LKEY,{...l,status:st||'active',expires:(d.license_key&&d.license_key.expires_at)||l.expires,product:pid||l.product,checked:Date.now()});
     }
   }catch(e){ /* offline or blocked — keep existing access */ }
 }
@@ -99,10 +151,11 @@ function screenExpired(){
     <li>A year of updates</li>
   </ul>
   ${buyButton('Unlock for a year','checkout')}
-  <p class="gSmall" style="text-align:center">Already have Spelling Quest or One Ayah? It's $25 to add this one — just ask.</p>
+  <p class="gSmall" style="text-align:center">Already have another Muslimeen Market app? Use code
+    <strong>${BUY.upgCode}</strong> at checkout and it's ${BUY.upgPrice}.</p>
   <hr class="gDiv">
   <p class="gSmall">Already bought it? Paste the code from your purchase email.</p>
-  <input class="gCode" id="gKey" placeholder="XXXXXXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false">
+  <input class="gCode" id="gKey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
   <button class="gBtn sec" id="gUnlock">Unlock</button>
   <div class="gMsg" id="gMsg"></div>`;
 }
@@ -110,7 +163,7 @@ function screenCode(){
   return `<div class="gateLogo">Muslim Kids Checklist</div>
   <h2>Enter your code</h2>
   <p>It's in the email you got when you bought it. Capitals and dashes don't matter.</p>
-  <input class="gCode" id="gKey" placeholder="XXXXXXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false">
+  <input class="gCode" id="gKey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
   <button class="gBtn" id="gUnlock">Unlock</button>
   <div class="gMsg" id="gMsg"></div>
   <hr class="gDiv">
@@ -125,20 +178,35 @@ function wireGate(){
   if(s('gHaveCode')) s('gHaveCode').onclick=e=>{e.preventDefault();showGate(screenCode());};
   if(s('gBack')) s('gBack').onclick=e=>{e.preventDefault();gateInit();};
   if(s('gUnlock')) s('gUnlock').onclick=async()=>{
-    const msg=s('gMsg'), key=normKey(s('gKey').value);
-    if(key.length<8){ msg.className='gMsg err'; msg.textContent='That code looks too short.'; return; }
+    const msg=s('gMsg'), typed=normKey(s('gKey').value);
+    if(typed.length<8){ msg.className='gMsg err'; msg.textContent='That code looks too short.'; return; }
     msg.className='gMsg'; msg.textContent='Checking…';
     try{
-      const d=await checkKey(key);
+      const {data:d, key}=await checkKeyLoose(typed);
       const st=d && d.license_key && d.license_key.status;
-      if(d && d.valid){
-        lwrite(LKEY,{key,status:st||'active',expires:(d.license_key&&d.license_key.expires_at)||null,checked:Date.now()});
+      if(d && d.valid && !productOK(d)){
+        /* A real, paid, active key — for one of the other apps. Say so plainly;
+           a confused customer who is told "invalid" emails support, and a
+           customer who is told the truth clicks the right buy button. */
+        const other=(d.meta && d.meta.product_name) ? d.meta.product_name : 'another app';
+        msg.className='gMsg err';
+        msg.innerHTML='That code is for '+String(other).replace(/[<>&]/g,'')+
+          ', not Muslim Kids Checklist. Each app has its own code — '+
+          'or get all three together.';
+      }else if(d && d.valid){
+        lwrite(LKEY,{
+          key,
+          status : st||'active',
+          expires: (d.license_key&&d.license_key.expires_at)||null,
+          product: (d.meta&&d.meta.product_id)||null,
+          checked: Date.now()
+        });
         msg.className='gMsg ok'; msg.textContent='Unlocked. Enjoy!';
         setTimeout(gateInit,700);
       }else if(st==='expired'){
         msg.className='gMsg err'; msg.textContent='That code has expired. Renew and it will work again.';
       }else{
-        msg.className='gMsg err'; msg.textContent="We don't recognise that code. Check the email it came in.";
+        msg.className='gMsg err'; msg.textContent="We don't recognize that code. Check the email it came in.";
       }
     }catch(e){
       msg.className='gMsg err';
