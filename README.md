@@ -1,44 +1,38 @@
-# Kids' Weekly Checklist
+# Muslim Kids Checklist
 
 A picture-first weekly chore and homework checklist for children, built to be usable by a child who
-cannot yet read. Every task is identifiable from its artwork alone.
+cannot yet read. Every task is identifiable from its artwork alone. Includes an Islamic daily
+routine (wudu, the five prayers, Qur'an) alongside ordinary chores and homework.
 
 One self-contained HTML file. No build step, no dependencies, no external requests — it runs from a
 locked-down iPad with no open web access, added to the Home Screen.
+
+Live at **https://muslimkidschecklist.github.io/**.
 
 ---
 
 ## Status
 
-**Private working version.** Not yet published, not yet for sale.
+**Built, tested, and live.** Not yet selling — the Gumroad account and its four products haven't
+been created yet, so the buy path has nowhere to send anyone. See `gumroad-setup.md` in the
+Dropbox ENTITY folder for what's left.
+
+The license gate is written and tested against Gumroad's API (34 automated tests, `_gate/gate.test.js`),
+but has not yet been walked end to end against Gumroad's real servers.
 
 ## Repository layout
 
-| File | Purpose |
+| File / folder | Purpose |
 |---|---|
-| `index.html` | The entire application — markup, styles, script, and 34 base64 WebP icons |
+| `index.html` | The application — markup, styles, script, 37 base64 WebP icons, and the inlined license gate |
+| `privacy.html` | Privacy policy |
+| `terms.html` | Terms of service |
+| `_gate/` | Source for the trial + license gate (`gate.js`, `gate.css`, `tour.js`, `tour.css`) and its test suite (`gate.test.js`), inlined into `index.html` |
 | `README.md` | This file |
-| `.gitignore` | Keeps local backups and OS clutter out of version control |
+| `.gitignore` / `.gitattributes` | Keep local backups and OS clutter out of version control |
 
-`index.html` is the deliverable. There is deliberately nothing else.
-
----
-
-## ⚠️ Before this repository is made public
-
-GitHub Pages requires a public repository, and everything in a public repo is readable by anyone —
-including its whole history. A file committed once stays in that history even after it is edited out.
-
-**All of the following must be true first:**
-
-- [ ] `defaults()` no longer contains real children's names, routines, medications, or schedules —
-      replace with neutral sample data
-- [ ] No personal name, address, location, or family detail anywhere in the file
-- [ ] The IXL and Raz-Kids icons are replaced with original artwork *(they are those companies'
-      logos; fine for private family use, not for anything distributed)*
-- [ ] Privacy grep run over the built file — see the playbook's Phase 7
-
-Until every box is ticked, **keep this repository private.**
+`index.html` is the deliverable a browser loads; `_gate/` is where the gate logic is authored and
+tested before being inlined.
 
 ---
 
@@ -52,7 +46,7 @@ rule below serves that and none are cosmetic.
 - **No emoji as the primary icon** — real artwork. Emoji remain in the data as a fallback only.
 - **Cream backgrounds for home routines, purple for schoolwork**, so "chore vs school work" reads
   before the picture does.
-- Icon names are capitalised, spaced, plain English — "Empty bag", "Spell Ar", "Math multiply".
+- Icon names are capitalized, spaced, plain English — "Empty bag", "Spell Ar", "Math multiply".
 - Fonts are `ui-rounded` / `SF Pro Rounded` so it feels native on iOS.
 
 ## Storage keys — do not change these

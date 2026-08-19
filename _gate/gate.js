@@ -250,7 +250,9 @@ function wireGate(){
 
     const r = await checkKey(typed);
 
-    if(r.reason === 'network' || r.reason === 'unconfigured')
+    if(r.reason === 'unconfigured')
+      return fail("We're not selling yet — check back soon, or email " + BUY.email + ' and we’ll let you know when codes are ready.');
+    if(r.reason === 'network')
       return fail('Could not reach us just now — check your connection and try again.');
 
     if(!r.ok)
