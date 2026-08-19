@@ -8,12 +8,12 @@
    so launch day is a one-line change, not a code change.               */
 
 const BUY = {
-  checkout : '',      // <- https://<handle>.gumroad.com/l/<permalink>   ($40/yr)
-  bundle   : '',      // <- the all-three product                        ($89/yr)
+  checkout : 'https://muslimkidschecklist.gumroad.com/l/sgpcb',
+  bundle   : '',      // <- the all-three product checkout URL — still needed ($89/yr)
   email    : 'muslimkidschecklist@gmail.com',
   price    : '$40',
   upgPrice : '$25',
-  upgCode  : '',      // <- Gumroad offer code for returning customers. NOT shown on screen.
+  upgCode  : 'SECOND',
   siblings : 'Spelling Quest or One Ayah At A Time',
   trialDays: 7
 };
@@ -39,8 +39,8 @@ const BUY = {
    It must NOT ship with both empty.
    --------------------------------------------------------------- */
 const PRODUCTS = [
-  { id: '', label: 'Muslim Kids Checklist' },   // <- fill at launch
-  { id: '', label: 'All Three'            }     // <- fill at launch
+  { id: '7e8uIMFPPfgCWGpda9OIsQ==', label: 'Muslim Kids Checklist' },
+  { id: 'wDMOSJIqK40DaP5STkK7Pw==', label: 'All Three'            }
 ];
 
 const GUM_API = 'https://api.gumroad.com/v2/licenses/verify';
