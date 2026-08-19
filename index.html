@@ -1308,7 +1308,7 @@ function startTour(force){
 const BUY = {
   checkout : '',      // <- https://<handle>.gumroad.com/l/<permalink>   ($40/yr)
   bundle   : '',      // <- the all-three product                        ($89/yr)
-  email    : 'MuslimeenMarket@gmail.com',
+  email    : 'muslimkidschecklist@gmail.com',
   price    : '$40',
   upgPrice : '$25',
   upgCode  : '',      // <- Gumroad offer code for returning customers. NOT shown on screen.
@@ -1418,7 +1418,7 @@ async function checkKey(rawKey){
    `cancelled_at` would cut off paying customers early, so only
    `ended_at` (the period actually ran out) counts.
 
-   Anything this function does not recognise is treated as fine. Guessing
+   Anything this function does not recognize is treated as fine. Guessing
    "dead" from an unfamiliar field is how you lock out someone who paid. */
 function deadReason(pur){
   if(!pur) return null;
