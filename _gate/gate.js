@@ -1,51 +1,49 @@
 
-/* ================= trial + license gate =================
+/* ================= trial + license gate — GUMROAD =================
+   Moved off Lemon Squeezy on 18 Aug 2026 after a second, final rejection.
+   The shape of this file is unchanged: a 7-day local trial, then a license
+   key the customer pastes in. Only the verification call is different.
+
    Phase 6 pattern: the buy button resolves its destination when tapped,
-   so launch day is a one-line change, not a code change.            */
+   so launch day is a one-line change, not a code change.               */
+
 const BUY = {
-  checkout : '',      // <- Lemon Squeezy checkout URL, $40/year
-  upgrade  : '',      // <- the $25 returning-customer checkout. NOT shown publicly — see below.
-  bundle   : '',      // <- $89 all three
+  checkout : '',      // <- https://<handle>.gumroad.com/l/<permalink>   ($40/yr)
+  bundle   : '',      // <- the all-three product                        ($89/yr)
   email    : 'MuslimeenMarket@gmail.com',
   price    : '$40',
   upgPrice : '$25',
+  upgCode  : '',      // <- Gumroad offer code for returning customers. NOT shown on screen.
   siblings : 'Spelling Quest or One Ayah At A Time',
   trialDays: 7
 };
 
 /* ---------------------------------------------------------------
-   WHY THE $25 PRICE IS NOT A CODE PRINTED ON THIS SCREEN.
+   WHICH PRODUCTS THIS APP ACCEPTS A KEY FOR.
 
-   A discount code shown to everyone is a price cut for everyone —
-   anyone reading it just pays $25 instead of $40, and the same is
-   true of a separate "Upgrade" product left on the storefront:
-   nothing at checkout knows whether the buyer already owns another
-   app. Neither mechanism can verify ownership.
+   Gumroad's verify endpoint is product-scoped: you must name the
+   product you are asking about. That is a real improvement over the
+   old setup, where "is this key valid?" was answerable by any key
+   from the same store — which meant a Spelling Quest key unlocked
+   this app. Here that cannot happen: a key only verifies against a
+   product it was actually issued for.
 
-   So the $25 is delivered, not advertised: it goes out in the
-   purchase and renewal emails for the other apps, and to anyone who
-   writes in. This screen says the price exists and how to get it.
+   So this list IS the entitlement rule. Two entries: this app, and
+   the three-app bundle. Nothing else can ever unlock it.
+
+   Find each id in Gumroad: Products → the product → Settings, the
+   field labelled "Product ID" (a uuid-looking string, NOT the
+   permalink in the URL).
+
+   Empty ids are skipped, so the gate still runs before launch.
+   It must NOT ship with both empty.
    --------------------------------------------------------------- */
-
-/* ---------------------------------------------------------------
-   WHICH KEYS THIS APP ACCEPTS.
-
-   One Lemon Squeezy store will hold three products. Asking the API
-   "is this key valid?" and nothing else means a Spelling Quest key
-   unlocks this app, because it IS a valid key from this store.
-
-   /v1/licenses/validate returns meta.product_id and meta.variant_id.
-   List the LIVE product ids this app is entitled to: itself, and the
-   three-app bundle. Live and test mode issue DIFFERENT ids — put the
-   LIVE ones here, or paying customers get turned away.
-
-   Leave the array empty and the check is skipped, so the gate still
-   works before launch. It must NOT ship empty.
-   --------------------------------------------------------------- */
-const ALLOWED_PRODUCTS = [
-  // <- Muslim Kids Checklist — Family Access   (live product_id)
-  // <- Muslimeen Market — All Three            (live product_id)
+const PRODUCTS = [
+  { id: '', label: 'Muslim Kids Checklist' },   // <- fill at launch
+  { id: '', label: 'All Three'            }     // <- fill at launch
 ];
+
+const GUM_API = 'https://api.gumroad.com/v2/licenses/verify';
 const TKEY='mkc:trial', LKEY='mkc:lic';
 const DAY=86400000;
 
@@ -64,66 +62,97 @@ function buyButton(label, kind){
   return `<a class="gBtn" href="${t.href}"${t.ext?' target="_blank" rel="noopener"':''}>${label}</a>`;
 }
 
-/* ---- license ---- */
-async function checkKey(key){
-  const r=await fetch('https://api.lemonsqueezy.com/v1/licenses/validate',{
-    method:'POST',
-    headers:{'Accept':'application/json','Content-Type':'application/x-www-form-urlencoded'},
-    body:'license_key='+encodeURIComponent(key)
+/* ---------------- license ----------------
+   One call, one product. Two things about this endpoint matter:
+
+   1. It answers "no" with HTTP 404, not with 200 + success:false.
+      Treating 404 as a network error would turn "wrong code" into
+      "we couldn't reach the server", which sends a confused customer
+      to support instead of to the right buy button.
+
+   2. increment_uses_count must be 'false'. It defaults to true, and
+      this app re-checks weekly — leaving it on would inflate every
+      customer's use count forever and make that number meaningless
+      if it is ever used for device limits.                          */
+async function gumVerify(productId, key){
+  const r = await fetch(GUM_API, {
+    method : 'POST',
+    headers: {'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'},
+    body   : new URLSearchParams({
+      product_id: productId,
+      license_key: key,
+      increment_uses_count: 'false'
+    }).toString()
   });
-  if(!r.ok) throw new Error('http '+r.status);
-  return r.json();
+  if(!r.ok && r.status !== 404) throw new Error('http '+r.status);   // a real failure
+  try{ return await r.json(); }catch(e){ return {success:false}; }   // 404 body is JSON, but be safe
 }
 
-/* Lemon Squeezy keys are lowercase UUIDs. iOS autocapitalization and a parent
-   retyping from a printout both mangle case, so try the sensible variants
-   rather than telling a paying customer their code is wrong. */
-const normKey=s=>(s||'').trim().replace(/\s+/g,'').replace(/[^A-Za-z0-9-]/g,'');
-async function checkKeyLoose(raw){
-  const k=normKey(raw);
-  const tries=[...new Set([k, k.toLowerCase(), k.toUpperCase()])];
-  let last=null;
-  for(const t of tries){
-    const d=await checkKey(t);
-    if(d && d.valid) return {data:d, key:t};
-    last=d;
+/* Keys are printed uppercase in Gumroad's emails but the API is
+   case-insensitive. Strip what a parent retyping from paper adds. */
+const normKey = s => (s||'').trim().replace(/\s+/g,'').replace(/[^A-Za-z0-9-]/g,'');
+
+/* Ask each product we accept, in order, until one says yes.
+   Returns {ok, data, product} — or {ok:false, reason:'network'|'unknown'}.
+   'network' is never allowed to look like 'unknown': a customer whose
+   wifi dropped must not be told their code is wrong. */
+async function checkKey(rawKey){
+  const key = normKey(rawKey);
+  const live = PRODUCTS.filter(p => p.id);
+  if(!live.length) return {ok:false, reason:'unconfigured', key};
+
+  let networkFails = 0;
+  for(const p of live){
+    try{
+      const d = await gumVerify(p.id, key);
+      if(d && d.success) return {ok:true, data:d, product:p, key};
+    }catch(e){ networkFails++; }
   }
-  return {data:last, key:k};
+  return {ok:false, reason: networkFails ? 'network' : 'unknown', key};
 }
 
-/* Does this key belong to THIS app? */
-function productOK(d){
-  if(!ALLOWED_PRODUCTS.length) return true;          // pre-launch escape hatch
-  const pid = d && d.meta && d.meta.product_id;
-  if(pid==null) return false;                        // can't prove it — don't grant
-  return ALLOWED_PRODUCTS.some(a=>String(a)===String(pid));
+/* Is a verified purchase still entitled to access?
+   Returns null when fine, or a short reason string when it is not.
+
+   The subtle one is cancellation. Gumroad sets subscription_cancelled_at
+   the moment a customer cancels, but they have already paid to the end of
+   the period — and our terms promise exactly that. Revoking on
+   `cancelled_at` would cut off paying customers early, so only
+   `ended_at` (the period actually ran out) counts.
+
+   Anything this function does not recognise is treated as fine. Guessing
+   "dead" from an unfamiliar field is how you lock out someone who paid. */
+function deadReason(pur){
+  if(!pur) return null;
+  if(pur.refunded === true)                        return 'refunded';
+  if(pur.chargebacked === true)                    return 'chargebacked';
+  if(pur.disputed === true && pur.dispute_won !== true) return 'disputed';
+  if(pur.subscription_ended_at)                    return 'ended';
+  if(pur.subscription_failed_at)                   return 'failed';
+  return null;                                     // cancelled-but-not-ended is still active
 }
 
 function licState(){
   const l=lread(LKEY);
   if(!l||!l.key) return {state:'none'};
-  if(l.expires && Date.now() > Date.parse(l.expires)) return {state:'expired', lic:l};
+  if(l.dead)     return {state:'expired', lic:l};
   return {state:'ok', lic:l, stale:(Date.now()-(l.checked||0))>7*DAY};
 }
+
 /* Re-check weekly, never on every open — the app must work offline on a
-   locked-down iPad. A failed check NEVER locks out a paying customer.   */
+   locked-down iPad. A failed check NEVER locks out a paying customer. */
 async function refreshLic(l){
-  try{
-    const d=await checkKey(l.key);
-    const st=d && d.license_key && d.license_key.status;
-    const pid=(d && d.meta && d.meta.product_id)||null;
-    /* Only a definitive wrong-product answer revokes. A network failure,
-       a 5xx, or a response with no meta leaves access exactly as it was. */
-    if(d && d.valid && pid!=null && !productOK(d)){
-      lwrite(LKEY,null);
-      return;
-    }
-    if(d && d.valid===false && st && st!=='active'){
-      lwrite(LKEY,{...l,status:st,expires:(d.license_key.expires_at||l.expires),product:pid||l.product,checked:Date.now()});
-    }else{
-      lwrite(LKEY,{...l,status:st||'active',expires:(d.license_key&&d.license_key.expires_at)||l.expires,product:pid||l.product,checked:Date.now()});
-    }
-  }catch(e){ /* offline or blocked — keep existing access */ }
+  const r = await checkKey(l.key);
+  if(r.reason === 'network' || r.reason === 'unconfigured') return;   // leave access exactly as it was
+  if(!r.ok){
+    /* A definitive "this key is not valid for either product" — the key was
+       disabled, or the product was deleted. Mark it, don't erase it, so the
+       expired screen can still show the code they pasted. */
+    lwrite(LKEY, {...l, dead:'unknown', checked:Date.now()});
+    return;
+  }
+  const dead = deadReason(r.data.purchase);
+  lwrite(LKEY, {...l, product:r.product.id, dead:dead||null, checked:Date.now()});
 }
 
 /* ---- trial ---- */
@@ -135,9 +164,21 @@ function trialInfo(){
 }
 const startTrial=()=>lwrite(TKEY,{start:Date.now()});
 
+const DEAD_COPY = {
+  refunded    : 'That purchase was refunded, so the code no longer works.',
+  chargebacked: 'That purchase was reversed by the card issuer, so the code no longer works.',
+  disputed    : 'That purchase is disputed, so the code is on hold. Email us and we will sort it out.',
+  ended       : 'That subscription has ended. Renew and the same code works again.',
+  failed      : 'The last renewal payment did not go through. Update your card and the same code works again.',
+  unknown     : 'That code is no longer active. Email us and we will sort it out.'
+};
+
 /* ---- screens ---- */
 function showGate(html){ const w=$('gateWrap'); $('gateCard').innerHTML=html; w.classList.add('on'); wireGate(); }
 function hideGate(){ $('gateWrap').classList.remove('on'); }
+
+const CODEBOX = `<input class="gCode" id="gKey" placeholder="XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"
+  autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">`;
 
 function screenWelcome(){
   return `<div class="gateLogo">Muslim Kids Checklist</div>
@@ -154,10 +195,18 @@ function screenWelcome(){
   <hr class="gDiv">
   <p class="gSmall">Already bought it? <a href="#" id="gHaveCode">Enter your code</a></p>`;
 }
-function screenExpired(){
+/* `dead` is set when a key that once worked has stopped working — refunded,
+   ended, renewal failed. Those customers are NOT on a trial and must never be
+   offered one, so this screen doubles as the end-of-subscription screen and
+   says which of the two situations they are in. */
+function screenExpired(dead){
+  const head = dead
+    ? `<h2>Your subscription has ended.</h2>
+       <p class="lede">${DEAD_COPY[dead] || DEAD_COPY.unknown} Your setup is safe — nothing has been deleted.</p>`
+    : `<h2>Your 7 days are up.</h2>
+       <p class="lede">Your setup is safe — nothing has been deleted. Unlock to carry on where you left off.</p>`;
   return `<div class="gateLogo">Muslim Kids Checklist</div>
-  <h2>Your 7 days are up.</h2>
-  <p class="lede">Your setup is safe — nothing has been deleted. Unlock to carry on where you left off.</p>
+  ${head}
   <p class="gPrice">${BUY.price}<small> / year, whole family</small></p>
   <ul class="gList">
     <li>Every device in the house</li>
@@ -167,10 +216,10 @@ function screenExpired(){
   ${buyButton('Unlock for a year','checkout')}
   <p class="gSmall" style="text-align:center">Already have ${BUY.siblings}? It's ${BUY.upgPrice} to add
     this one — your code is in your welcome email, or <a href="mailto:${BUY.email}?subject=${
-    encodeURIComponent('Upgrade code please')}">ask us</a> and we'll send it.</p>
+    encodeURIComponent('Second app, please')}">ask us</a> and we'll send it.</p>
   <hr class="gDiv">
   <p class="gSmall">Already bought it? Paste the code from your purchase email.</p>
-  <input class="gCode" id="gKey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+  ${CODEBOX}
   <button class="gBtn sec" id="gUnlock">Unlock</button>
   <div class="gMsg" id="gMsg"></div>`;
 }
@@ -178,13 +227,14 @@ function screenCode(){
   return `<div class="gateLogo">Muslim Kids Checklist</div>
   <h2>Enter your code</h2>
   <p>It's in the email you got when you bought it. Capitals and dashes don't matter.</p>
-  <input class="gCode" id="gKey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+  ${CODEBOX}
   <button class="gBtn" id="gUnlock">Unlock</button>
   <div class="gMsg" id="gMsg"></div>
   <hr class="gDiv">
   <p class="gSmall">Lost it? Email <a href="mailto:${BUY.email}">${BUY.email}</a> and we'll resend it.</p>
   <p class="gSmall"><a href="#" id="gBack">Back</a></p>`;
 }
+
 
 function wireGate(){
   const s=id=>document.getElementById(id);
@@ -194,39 +244,29 @@ function wireGate(){
   if(s('gBack')) s('gBack').onclick=e=>{e.preventDefault();gateInit();};
   if(s('gUnlock')) s('gUnlock').onclick=async()=>{
     const msg=s('gMsg'), typed=normKey(s('gKey').value);
-    if(typed.length<8){ msg.className='gMsg err'; msg.textContent='That code looks too short.'; return; }
+    const fail=t=>{ msg.className='gMsg err'; msg.textContent=t; };
+    if(typed.length<8) return fail('That code looks too short.');
     msg.className='gMsg'; msg.textContent='Checking…';
-    try{
-      const {data:d, key}=await checkKeyLoose(typed);
-      const st=d && d.license_key && d.license_key.status;
-      if(d && d.valid && !productOK(d)){
-        /* A real, paid, active key — for one of the other apps. Say so plainly;
-           a confused customer who is told "invalid" emails support, and a
-           customer who is told the truth clicks the right buy button. */
-        const other=(d.meta && d.meta.product_name) ? d.meta.product_name : 'another app';
-        msg.className='gMsg err';
-        msg.innerHTML='That code is for '+String(other).replace(/[<>&]/g,'')+
-          ', not Muslim Kids Checklist. Each app has its own code — '+
-          'or get all three together.';
-      }else if(d && d.valid){
-        lwrite(LKEY,{
-          key,
-          status : st||'active',
-          expires: (d.license_key&&d.license_key.expires_at)||null,
-          product: (d.meta&&d.meta.product_id)||null,
-          checked: Date.now()
-        });
-        msg.className='gMsg ok'; msg.textContent='Unlocked. Enjoy!';
-        setTimeout(()=>{ gateInit(); startTour(); },700);
-      }else if(st==='expired'){
-        msg.className='gMsg err'; msg.textContent='That code has expired. Renew and it will work again.';
-      }else{
-        msg.className='gMsg err'; msg.textContent="We don't recognize that code. Check the email it came in.";
-      }
-    }catch(e){
-      msg.className='gMsg err';
-      msg.textContent='Could not reach us just now — check your connection and try again.';
-    }
+
+    const r = await checkKey(typed);
+
+    if(r.reason === 'network' || r.reason === 'unconfigured')
+      return fail('Could not reach us just now — check your connection and try again.');
+
+    if(!r.ok)
+      return fail("We don't recognize that code. Check the email it came in — and that it's the code for this app, not another one.");
+
+    const dead = deadReason(r.data.purchase);
+    if(dead) return fail(DEAD_COPY[dead] || DEAD_COPY.unknown);
+
+    lwrite(LKEY, {
+      key    : r.key,
+      product: r.product.id,
+      dead   : null,
+      checked: Date.now()
+    });
+    msg.className='gMsg ok'; msg.textContent='Unlocked. Enjoy!';
+    setTimeout(()=>{ gateInit(); startTour(); },700);
   };
 }
 
@@ -263,6 +303,14 @@ function gateInit(){
   if(gateInit._sw==='expired'){ $('trialBar').classList.remove('on'); showGate(screenExpired()); return; }
   const L=licState();
   if(L.state==='ok'){ hideGate(); $('trialBar').classList.remove('on'); if(L.stale) refreshLic(L.lic); return; }
+  if(L.state==='expired'){
+    /* They bought once and it lapsed. Without this they fall through to the
+       trial branch and — having never started a trial — get offered seven
+       free days, which is both wrong and a way to never renew.            */
+    $('trialBar').classList.remove('on');
+    showGate(screenExpired(L.lic.dead));
+    return;
+  }
   const t=trialInfo();
   if(!t.started){ showGate(screenWelcome()); return; }
   if(t.left>0){
