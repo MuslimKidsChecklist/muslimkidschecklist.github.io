@@ -1306,12 +1306,12 @@ function startTour(force){
    so launch day is a one-line change, not a code change.               */
 
 const BUY = {
-  checkout : 'https://muslimkidschecklist.gumroad.com/l/sgpcb',
-  bundle   : '',      // <- the all-three product checkout URL — still needed ($89/yr)
+  checkout : 'https://muslimkidschecklist.gumroad.com/l/sgpcb',   // Family Access — $40/yr
+  upgrade  : 'https://muslimkidschecklist.gumroad.com/l/mtdviu',  // Second App Access — $25/yr
+  bundle   : 'https://muslimkidschecklist.gumroad.com/l/bkvfvr',  // All Three Apps — $89/yr
   email    : 'muslimkidschecklist@gmail.com',
   price    : '$40',
   upgPrice : '$25',
-  upgCode  : 'SECOND',
   siblings : 'Spelling Quest or One Ayah At A Time',
   trialDays: 7
 };
@@ -1326,19 +1326,31 @@ const BUY = {
    this app. Here that cannot happen: a key only verifies against a
    product it was actually issued for.
 
-   So this list IS the entitlement rule. Two entries: this app, and
-   the three-app bundle. Nothing else can ever unlock it.
+   So this list IS the entitlement rule. Rebuilt 20 Aug 2026: each app
+   in the family (Spelling Quest, One Ayah At A Time, Muslim Kids
+   Checklist) now has its OWN three Gumroad products — Family Access,
+   Second App Access, and All Three Apps — instead of one shared
+   discount code and a reused bundle ID. This app accepts a key issued
+   for any of ITS OWN three products.
 
-   Find each id in Gumroad: Products → the product → Settings, the
-   field labelled "Product ID" (a uuid-looking string, NOT the
+   Still to add here: the other two apps' own "All Three Apps" bundle
+   product IDs, once Spelling Quest and One Ayah publish theirs — a
+   bundle key bought from either sibling app must also unlock this one.
+   Not yet received from that project as of 20 Aug.
+
+   Find each id in Gumroad: Products → the product → Content tab →
+   Insert → License key block (a base64-looking string, NOT the
    permalink in the URL).
 
    Empty ids are skipped, so the gate still runs before launch.
-   It must NOT ship with both empty.
+   It must NOT ship with all entries empty.
    --------------------------------------------------------------- */
 const PRODUCTS = [
-  { id: '7e8uIMFPPfgCWGpda9OIsQ==', label: 'Muslim Kids Checklist' },
-  { id: 'wDMOSJIqK40DaP5STkK7Pw==', label: 'All Three'            }
+  { id: '7e8uIMFPPfgCWGpda9OIsQ==', label: 'Muslim Kids Checklist — Family Access'      },
+  { id: 'MDGCYGOYZKbezd3K0JXnfg==', label: 'Muslim Kids Checklist — Second App Access'  },
+  { id: '32mLygvh97ZA0_hkLiqHSA==', label: 'Muslim Kids Checklist — All Three Apps'     }
+  // { id: '', label: 'Spelling Quest — All Three Apps' },   // <- add once known
+  // { id: '', label: 'One Ayah At A Time — All Three Apps' } // <- add once known
 ];
 
 const GUM_API = 'https://api.gumroad.com/v2/licenses/verify';
@@ -1512,9 +1524,8 @@ function screenExpired(dead){
     <li>A year of updates</li>
   </ul>
   ${buyButton('Unlock for a year','checkout')}
-  <p class="gSmall" style="text-align:center">Already have ${BUY.siblings}? It's ${BUY.upgPrice} to add
-    this one — your code is in your welcome email, or <a href="mailto:${BUY.email}?subject=${
-    encodeURIComponent('Second app, please')}">ask us</a> and we'll send it.</p>
+  <p class="gSmall" style="text-align:center">Already have ${BUY.siblings}? Add this one for just ${BUY.upgPrice}.</p>
+  ${buyButton(`Add for ${BUY.upgPrice}/year`,'upgrade')}
   <hr class="gDiv">
   <p class="gSmall">Already bought it? Paste the code from your purchase email.</p>
   ${CODEBOX}
