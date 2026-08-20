@@ -283,6 +283,26 @@ function wireGate(){
   };
 }
 
+/* ---- sign out ----
+   Clears the trial and license stored on THIS device and drops back to the
+   code-entry screen. This does not touch the license itself — a customer's
+   code still works forever from their purchase email, so this is safe on a
+   shared device or when a family wants to re-enter a different code. It is
+   a local reset, the same shape as the ?gate=reset test switch below, minus
+   the tour-seen flag (that one lives with the app's own code, not the gate).
+
+   Wired from the Grown-ups panel's "Sign out" button. That button requires
+   a second tap to confirm — never a confirm()/alert() dialog, which iOS
+   silently swallows for a Home Screen web app (see the walkthrough note). */
+function signOut(){
+  try{
+    localStorage.removeItem(TKEY);
+    localStorage.removeItem(LKEY);
+  }catch(e){}
+  $('trialBar').classList.remove('on');
+  showGate(screenCode());
+}
+
 /* ---------------------------------------------------------------
    TEST SWITCH.
 
