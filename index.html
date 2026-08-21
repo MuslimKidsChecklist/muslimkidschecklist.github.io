@@ -485,7 +485,7 @@ function defaults(){ return {"v": 4, "kids": [{"id": "kid1", "name": "Yusuf", "a
 
 /* ---------- state ---------- */
 let cfg = defaults();
-let dataReady=false, freshInstall=false;  /* freshInstall: storage answered and was genuinely empty */
+let dataReady=false;   /* set by load() once config and weeks have actually been read */
 let kid = null, view='today', weekMode='cur', pickDay=new Date().getDay();
 const weeks = {cur:{}, prev:{}};
 
@@ -599,7 +599,6 @@ async function load(){
   } else {
     // storage answered and is genuinely empty: nothing to overwrite, so save the starting setup now
     cfg.ts=Date.now(); cfgSource='cloud'; cfgDirty=true;
-    freshInstall=true;
   }
   if(tidy()){ cfg.ts=Date.now(); cfgDirty=true; }   // strip stray spaces and save the clean copy once
   backupCfg();
@@ -1700,14 +1699,23 @@ const PACKS = [{"id":"islamic","name":"Islamic routine","blurb":"Salah and wudu 
 const PACKKEY = 'mkc:packs';
 function packsChosen(){ try{ return localStorage.getItem(PACKKEY)==='1'; }catch(e){ return true; } }
 function markPacks(){ try{ localStorage.setItem(PACKKEY,'1'); }catch(e){} }
+/* True while the config still matches the shipped sample task-for-task.
+   Two cheaper-looking tests were both tried and both were wrong:
+     - cfg.ts === 0     : load() stamps a real ts onto the sample itself.
+     - "storage empty"  : load() writes the sample to localStorage on the
+                          very first page view, so a visitor who looked
+                          once and came back later would never be offered
+                          a pack.
+   Comparing the task ids is the only test that stays true for somebody who
+   has not chosen yet, and false the instant a parent edits anything.      */
+function isPristine(){
+  try{
+    const ids = c => JSON.stringify((c.kids||[]).map(k=>(k.tasks||[]).map(t=>t.id)));
+    return ids(cfg) === ids(defaults());
+  }catch(e){ return false; }
+}
 function packsNeeded(){
-  if(packsChosen()) return false;
-  /* freshInstall is set by load() ONLY when storage answered and held
-     nothing at all. Checking cfg.ts here instead looks right and is wrong:
-     load() stamps a real ts onto the shipped sample in exactly that case,
-     so a ts test both misses new installs and — before load() settles —
-     fires for existing families whose config has not been read back yet. */
-  return freshInstall;
+  return !packsChosen() && isPristine();
 }
 function applyPack(id){
   const p = PACKS.filter(x=>x.id===id)[0];
