@@ -1504,12 +1504,48 @@ async function gumVerify(productId, key){
    case-insensitive. Strip what a parent retyping from paper adds. */
 const normKey = s => (s||'').trim().replace(/\s+/g,'').replace(/[^A-Za-z0-9-]/g,'');
 
+/* ---------------------------------------------------------------
+   HAND-ISSUED ACCESS CODES.
+
+   A second, separate path alongside the Gumroad license check — for
+   family, testers, or anyone we want to give access to without a
+   purchase. No trial timer, no Gumroad call, never expires. The plain
+   code is never stored in this file, only a salted SHA-256 hash of it,
+   so reading the source doesn't hand out a working code (though a short
+   or guessable code still could be brute-forced offline — codes are
+   generated long and random on purpose; don't hand-pick a short one).
+
+   To add another: generate a random code, compute
+   sha256(DEV_SALT + THE_CODE) in the same uppercase/hyphenated form the
+   app normalizes to, add the hex digest to CODE_HASHES with a comment
+   saying who it's for, and hand out the plain code separately (chat,
+   email — never commit the plain code anywhere). Revoking one just
+   means deleting its hash from this array. --------------------------------------------------------------- */
+const DEV_SALT = '87df59e646a5faefd158cf210d675574';
+const CODE_HASHES = [
+  '23f646a86d193a60de6ee1779a720f75071a1eefe26e283d9f79b0a2c1b0ab20'  // Kathryn — family access, 21 Aug 2026
+];
+async function sha256Hex(s){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function codeOk(key){
+  if(!key) return false;
+  const h = await sha256Hex(DEV_SALT + key.toUpperCase());
+  return CODE_HASHES.includes(h);
+}
+
 /* Ask each product we accept, in order, until one says yes.
    Returns {ok, data, product} — or {ok:false, reason:'network'|'unknown'}.
    'network' is never allowed to look like 'unknown': a customer whose
-   wifi dropped must not be told their code is wrong. */
+   wifi dropped must not be told their code is wrong.
+   Hand-issued access codes are checked first — they work offline and
+   never touch Gumroad, so they still work if the network is down or no
+   products are configured yet. */
 async function checkKey(rawKey){
   const key = normKey(rawKey);
+  if(await codeOk(key)) return {ok:true, dev:true, key};
+
   const live = PRODUCTS.filter(p => p.id);
   if(!live.length) return {ok:false, reason:'unconfigured', key};
 
@@ -1563,6 +1599,7 @@ async function refreshLic(l){
     lwrite(LKEY, {...l, dead:'unknown', checked:Date.now()});
     return;
   }
+  if(r.dev){ lwrite(LKEY, {...l, dead:null, checked:Date.now()}); return; }   // access code — never expires, no Gumroad fields to read
   const dead = deadReason(r.data.purchase);
   lwrite(LKEY, {...l, product:r.product.id, dead:dead||null, checked:Date.now()});
 }
@@ -1684,12 +1721,12 @@ function wireGate(){
     if(!r.ok)
       return fail("We don't recognize that code. Check the email it came in — and that it's the code for this app, not another one.");
 
-    const dead = deadReason(r.data.purchase);
+    const dead = r.dev ? null : deadReason(r.data.purchase);
     if(dead) return fail(DEAD_COPY[dead] || DEAD_COPY.unknown);
 
     lwrite(LKEY, {
       key    : r.key,
-      product: r.product.id,
+      product: r.dev ? 'access-code' : r.product.id,
       dead   : null,
       checked: Date.now()
     });
