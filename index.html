@@ -914,7 +914,7 @@ function refreshCommit(row,t){
   const ok=readyToAdd(t);
   b.disabled=!ok;
   const h=row.querySelector('.commithint');
-  if(h) h.textContent = ok ? 'Ready — tap to put it on the checklist.' : 'Needs a name, at least one day, and a time of day.';
+  if(h) h.textContent = ok ? 'Ready — tap to put it on the checklist.' : 'Give this task a name, at least one day, and a time of day.';
 }
 function taskRow(t, secId, pos, count){
   const multi = cfg.kids.length>1;
@@ -950,7 +950,7 @@ function taskRow(t, secId, pos, count){
       </div>
       ${(t.draft||!(t.secs||[]).length)?`<div class="chips"><span class="lab"></span>
         <button class="solid commit" data-act="commit" ${readyToAdd(t)?'':'disabled'}>Add to checklist</button>
-        <span class="pnote commithint" style="margin:0">${readyToAdd(t)?'Ready — tap to put it on the checklist.':'Needs a name, at least one day, and a time of day.'}</span></div>`:''}
+        <span class="pnote commithint" style="margin:0">${readyToAdd(t)?'Ready — tap to put it on the checklist.':'Give this task a name, at least one day, and a time of day.'}</span></div>`:''}
       ${linkNote===t.id?`<p class="pnote linknote">Shared with ${shareWord()}. The details stay in step, but each child keeps their own order — move it where you want it on each child's tab.</p>`:''}
     </div>`;
 }
@@ -1058,7 +1058,7 @@ pBody.addEventListener('click',e=>{
     return;
   }
   if(act==='iconclear'){
-    hit.forEach(x=>x.icon=null);
+    hit.forEach(x=>{ x.icon=null; x.e='⭐'; });
     pIconOpenFor=null;
     saveCfg(); refreshCommit(row, hit[0]); renderPanel();
     return;
