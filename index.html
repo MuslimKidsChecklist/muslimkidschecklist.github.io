@@ -3,6 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Link preview (Open Graph). Read by iMessage, WhatsApp, Slack, Facebook.
+     Image is exactly 1200x630 with everything inside the middle 80%, because
+     each app crops this differently. One shared image for the whole site. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Muslim Kids Checklist">
+<meta property="og:url" content="https://muslimkidschecklist.github.io/">
+<meta property="og:title" content="Muslim Kids Checklist — a checklist that grows with your child">
+<meta property="og:description" content="Morning, after school and before bed, in pictures a young child can read on their own and words an older one can. Kindergarten through eighth grade. Seven days free.">
+<meta property="og:image" content="./og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Muslim Kids Checklist — a checklist that grows with your child">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Muslim Kids Checklist — a checklist that grows with your child">
+<meta name="twitter:description" content="Morning, after school and before bed, in pictures a young child can read on their own and words an older one can. Kindergarten through eighth grade. Seven days free.">
+<meta name="twitter:image" content="./og.png">
+
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Muslim Kids Checklist">
@@ -202,6 +219,8 @@ body{background:var(--paper);background-image:radial-gradient(var(--card) 1.5px,
 /* ---------- trial / licence gate ---------- */
 #gateWrap{position:fixed;inset:0;z-index:9999;background:var(--paper);overflow:auto;display:none;padding:24px 16px 40px}
 #gateWrap.on{display:block}
+.ownWrap{margin:14px 0 6px;padding:14px;border:3px dashed var(--line);border-radius:16px}
+.ownWrap .gCode{margin-bottom:8px}
 .packWrap{display:flex;flex-direction:column;gap:12px;margin:18px 0 6px}
 .packBtn{display:block;width:100%;text-align:left;cursor:pointer;background:var(--card);
   border:3px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:14px 16px;
@@ -1589,7 +1608,12 @@ const lread=k=>{ try{ return JSON.parse(localStorage.getItem(k)||'null'); }catch
 const lwrite=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
 
 function buyHref(kind){
-  const u=BUY[kind]||BUY.checkout;
+  /* A KNOWN tier whose URL is not filled in yet must fall back to email, NOT
+     to the Family Access checkout. `BUY[kind] || BUY.checkout` did the latter,
+     which meant the "$49 a year" button quietly sent the buyer to the $40
+     product page — they would have bought the wrong thing believing the
+     button. Only an unknown kind falls back to the default checkout. */
+  const u = Object.prototype.hasOwnProperty.call(BUY, kind) ? BUY[kind] : BUY.checkout;
   if(u) return {href:u, ext:true};
   if(BUY.email) return {href:'mailto:'+BUY.email+'?subject='+encodeURIComponent('Muslim Kids Checklist — I would like to buy'), ext:false};
   return null;
@@ -2027,9 +2051,23 @@ function screenWelcome(){
   <div class="gMsg" id="gMsg"></div>
   <hr class="gDiv">
   ${buyButton(`Keep it for a year &mdash; ${BUY.price} a year for the whole family`,'checkout','tier')}
-  <p class="gSmall">Already have ${BUY.siblings}?</p>
-  ${buyButton(`Add this one &mdash; ${BUY.upgPrice} a year`,'upgrade','tier sec')}
-  ${buyButton('New to all three &mdash; $89 a year','bundle','tier sec')}
+  ${buyButton('New to all three of our apps &mdash; $89 a year','bundle','tier sec')}
+
+  <!-- The cheaper tiers are for families who already own one of our apps, so
+       they stay hidden until a key from one of those apps checks out live.
+       Failing this check only ever shows the full price - it can never open
+       the app, and it is a different list from the one that unlocks it. -->
+  <div class="ownWrap">
+    <p class="gSmall">Already using ${BUY.siblings}? Paste that app's key for your price.</p>
+    <input class="gCode" id="gOwnKey" placeholder="Your key from the other app"
+      autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <button class="gBtn sec" id="gOwnCheck">Show my price</button>
+    <div class="gMsg" id="gOwnMsg"></div>
+    <div id="gOwnTiers" hidden>
+      ${buyButton(`Add this one &mdash; ${BUY.upgPrice} a year`,'upgrade','tier sec')}
+      ${buyButton(`Add both the others &mdash; ${BUY.twoPrice} a year`,'addTwo','tier sec')}
+    </div>
+  </div>
   <p class="gSmall">12 months, renews on its own until you cancel any time.</p>
   <hr class="gDiv">
   <ul class="gList">
@@ -2086,6 +2124,27 @@ function wireGate(){
   const s=id=>document.getElementById(id);
   if(s('gStart')) s('gStart').onclick=e=>{e.preventDefault();startTrial();gateInit();showPacks(startTour);};
   if(s('gHaveCode')) s('gHaveCode').onclick=e=>{e.preventDefault();showGate(screenCode());};
+
+  /* Reveal the $25 / $49 tiers to somebody who already owns one of our apps.
+     Deliberately generous on failure: a network problem shows the full price
+     rather than an error, because the worst outcome here is charging someone
+     more than they deserve, never locking anyone out. */
+  if(s('gOwnCheck')) s('gOwnCheck').onclick=async()=>{
+    const box=s('gOwnKey'), msg=s('gOwnMsg'), tiers=s('gOwnTiers'), btn=s('gOwnCheck');
+    const typed=normKey(box.value);
+    if(typed.length<8){ msg.className='gMsg err'; msg.textContent='That key looks too short.'; return; }
+    btn.disabled=true; msg.className='gMsg'; msg.textContent='Checking\u2026';
+    const r=await provesOwnership(typed);
+    btn.disabled=false;
+    if(r.ok){
+      tiers.hidden=false;
+      msg.className='gMsg ok';
+      msg.textContent='Found your '+r.product.label.split(' \u2014 ')[0]+'. Here are your prices.';
+    }else{
+      msg.className='gMsg err';
+      msg.textContent="We couldn't match that key to one of our apps. It should be the key from Spelling Quest or One Ayah At A Time, not this one.";
+    }
+  };
   if(s('gBack')) s('gBack').onclick=e=>{e.preventDefault();gateInit();};
   if(s('gUnlock')) s('gUnlock').onclick=async()=>{
     const msg=s('gMsg'), typed=normKey(s('gKey').value);
