@@ -352,6 +352,7 @@ body{background:var(--paper);background-image:radial-gradient(var(--card) 1.5px,
         <button class="mini" id="btnRestore">Restore a backup</button>
         <button class="mini" id="btnTour">Show me around again</button>
         <button class="mini" id="btnSignOut">Sign out</button>
+        <button class="mini" id="btnForget">Stop syncing &amp; remove</button>
       </div>
     </div>
     <div class="panel-body">
@@ -1830,8 +1831,16 @@ const SYNC_SALT = 'MuslimKidsChecklist/family/';
 
 let syncFp = null, syncing = false, syncTimer = null, applyingSync = false;
 
+const NOSYNC='mkc:nosync';
+function syncOffHere(){ try{ return localStorage.getItem(NOSYNC)==='1'; }catch(e){ return false; } }
+
 function licKeyForSync(){
   try{
+    /* A family who asked for their data to be removed must not have this
+       device quietly upload it again 2.5 seconds later. Deleting the server
+       record without also stopping this device would have made the button
+       useless — the next save would push everything straight back. */
+    if(syncOffHere()) return null;
     const l = lread(LKEY);
     if(!l || !l.key || l.dead) return null;
     return l.key;
@@ -1951,8 +1960,13 @@ document.addEventListener('visibilitychange', function(){ if(!document.hidden) s
 window.addEventListener('online', function(){ syncNow(); });
 
 async function forgetFamily(){
-  try{ const fp = await familyFp(); if(fp) await rpc('forget_checklist', {p_fp: fp}); }
-  catch(e){}
+  try{
+    const fp = await familyFp();
+    if(fp) await rpc('forget_checklist', {p_fp: fp});
+    try{ localStorage.setItem(NOSYNC,'1'); }catch(e){}
+    syncFp = null; syncOK = null; setSync('saved');
+    return true;
+  }catch(e){ return false; }
 }
 
 
@@ -2099,8 +2113,21 @@ function screenExpired(dead){
     <li>A year of updates</li>
   </ul>
   ${buyButton('Unlock for a year','checkout')}
-  <p class="gSmall" style="text-align:center">Already have ${BUY.siblings}? Add this one for just ${BUY.upgPrice}.</p>
-  ${buyButton(`Add for ${BUY.upgPrice}/year`,'upgrade')}
+
+  <!-- Same ownership gate as the welcome screen. This one is seen only by
+       somebody whose licence for THIS app lapsed, but the $25/$49 tiers still
+       require owning one of the OTHER apps, so they are hidden here too. -->
+  <div class="ownWrap">
+    <p class="gSmall">Already using ${BUY.siblings}? Paste that app's key for your price.</p>
+    <input class="gCode" id="gOwnKey" placeholder="Your key from the other app"
+      autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <button class="gBtn sec" id="gOwnCheck">Show my price</button>
+    <div class="gMsg" id="gOwnMsg"></div>
+    <div id="gOwnTiers" hidden>
+      ${buyButton(`Add this one &mdash; ${BUY.upgPrice} a year`,'upgrade','tier sec')}
+      ${buyButton(`Add both the others &mdash; ${BUY.twoPrice} a year`,'addTwo','tier sec')}
+    </div>
+  </div>
   <hr class="gDiv">
   <p class="gSmall">Already bought it? Paste the code from your purchase email.</p>
   ${CODEBOX}
@@ -2165,6 +2192,7 @@ function wireGate(){
     const dead = r.dev ? null : deadReason(r.data.purchase);
     if(dead) return fail(DEAD_COPY[dead] || DEAD_COPY.unknown);
 
+    try{ localStorage.removeItem(NOSYNC); }catch(e){}   // a fresh unlock turns syncing back on
     lwrite(LKEY, {
       key    : r.key,
       product: r.dev ? 'access-code' : r.product.id,
@@ -2267,6 +2295,24 @@ if($('btnSignOut')) $('btnSignOut').onclick=e=>{
   b.dataset.armed=''; b.textContent='Sign out';
   $('sheet').classList.remove('open');
   signOut();
+};
+
+/* Deletes this family's record from the sync service. Tap-twice to confirm,
+   never a dialog. Deliberately does NOT touch what is on this device: the
+   checklist keeps working, it just stops being shared. Backs the deletion
+   promise in privacy.html. */
+if($('btnForget')) $('btnForget').onclick=async e=>{
+  const b=e.currentTarget, LABEL='Stop syncing & remove';
+  if(b.dataset.armed!=='1'){
+    b.dataset.armed='1';
+    b.textContent='Tap again to remove';
+    setTimeout(()=>{ b.dataset.armed=''; b.textContent=LABEL; },4000);
+    return;
+  }
+  b.dataset.armed=''; b.disabled=true; b.textContent='Removing\u2026';
+  await forgetFamily();
+  b.textContent='Removed \u2014 this device no longer syncs';
+  setTimeout(()=>{ b.disabled=false; b.textContent=LABEL; },3000);
 };
 
 gateInit();
