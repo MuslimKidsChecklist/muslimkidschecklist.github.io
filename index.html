@@ -544,6 +544,30 @@ let cfgSource='defaults', cfgLocked=false, sharedCfgOK=null;
 const packWeek = w => JSON.stringify(Object.fromEntries(cfg.kids.map(k=>[k.id,[...(weeks[w][k.id]||[])]])));
 function unpack(raw){ const o=JSON.parse(raw); const r={}; for(const k in o) r[k]=new Set(o[k]||[]); return r; }
 const merge=(a,b)=>new Set([...(a||[]),...(b||[])]);
+/* Per-check timestamps. Checks used to be a bare Set of keys, which is fine
+   for one device but cannot express "this was un-ticked at 4pm" — a union
+   merge silently resurrects anything anyone ever ticked. Sync needs to know
+   WHEN, so every add or delete is stamped here.                            */
+let stamps = {cur:{}, prev:{}};
+const stKey = k => 'bk:st:'+ck(k);
+function stampCheck(w, kidId, k, ms){
+  if(!stamps[w]) stamps[w]={};
+  if(!stamps[w][kidId]) stamps[w][kidId]={};
+  stamps[w][kidId][k] = ms || Date.now();
+}
+function backupStamps(){
+  try{ localStorage.setItem(stKey(activeKey()), JSON.stringify(stamps[weekMode]||{})); }catch(e){}
+}
+function loadStamps(w, wkey){
+  try{ const r=localStorage.getItem(stKey(wkey)); stamps[w] = r ? JSON.parse(r) : {}; }
+  catch(e){ stamps[w]={}; }
+}
+/* Single place a check changes, so nothing can tick a box without stamping it. */
+function setCheck(k, on){
+  const b = checks();
+  if(on) b.add(k); else b.delete(k);
+  stampCheck(weekMode, kid, k);
+}
 function backupWeek(){ try{ localStorage.setItem('bk:'+ck(activeKey()), packWeek(weekMode)); }catch(e){} }
 function backupCfg(){ try{ localStorage.setItem(LCFG, JSON.stringify(cfg)); }catch(e){} }
 function localCfg(){ try{ const r=localStorage.getItem(LCFG); if(!r) return null;
@@ -607,6 +631,7 @@ async function load(){
 
   for(const w of ['cur','prev']){
     weeks[w]={};
+    loadStamps(w, w==='cur'?WEEK_KEY:PREV_KEY);
     for(const k of cfg.kids) weeks[w][k.id]=new Set();
     const raw = await read(ck(w==='cur'?WEEK_KEY:PREV_KEY), true);
     if(raw){ try{ const o=unpack(raw); for(const k in o) weeks[w][k]=o[k]; syncOK=true; }catch(e){} }
@@ -619,10 +644,11 @@ async function load(){
   if(cfgDirty) schedule();
   render(); setSync('saved');
   dataReady=true;
+  syncNow();          // first pull of the family's data, if this device holds a licence
 }
 
-function save(){ backupWeek(); dirty=true; setSync('saving'); schedule(); }
-function saveCfg(){ cfg.ts=Date.now(); backupCfg(); cfgDirty=true; dirty=true; setSync('saving'); schedule(); }
+function save(){ backupWeek(); backupStamps(); dirty=true; setSync('saving'); schedule(); syncSoon(); }
+function saveCfg(){ cfg.ts=Date.now(); backupCfg(); cfgDirty=true; dirty=true; setSync('saving'); schedule(); syncSoon(); }
 
 function schedule(){
   if(timer||writing) return;
@@ -703,7 +729,7 @@ function toggleSecDay(secId,i){
   const K=kidObj(); const list=K.tasks.filter(t=>inSec(t,secId)&&onDay(t,i)&&!t.draft);
   if(!list.length) return;
   const allOn=list.every(t=>checks().has(key(t.id,secId,i)));
-  list.forEach(t=>{ const k=key(t.id,secId,i); allOn?checks().delete(k):checks().add(k); });
+  list.forEach(t=>{ setCheck(key(t.id,secId,i), !allOn); });
   save();
 }
 function toggleDay(i){
@@ -711,7 +737,7 @@ function toggleDay(i){
   const all=[]; for(const sec of SECTIONS) for(const t of secTasks(K,sec)) if(onDay(t,i)) all.push(key(t.id,sec.id,i));
   if(!all.length) return;
   const allOn=all.every(k=>checks().has(k));
-  all.forEach(k=>allOn?checks().delete(k):checks().add(k));
+  all.forEach(k=>setCheck(k, !allOn));
   save();
 }
 
@@ -830,7 +856,7 @@ board.addEventListener('click',e=>{
   if(ad){ toggleDay(+ad.dataset.allday); render(); return; }
   const c=e.target.closest('[data-t]'); if(!c) return;
   const k=key(c.dataset.t,c.dataset.s,+c.dataset.d);
-  checks().has(k)?checks().delete(k):checks().add(k);
+  setCheck(k, !checks().has(k));
   c.setAttribute('aria-checked',checks().has(k));
   save();
   render();
@@ -1466,36 +1492,40 @@ function startTour(force){
 
 const BUY = {
   checkout : 'https://muslimkidschecklist.gumroad.com/l/sgpcb',   // Family Access — $40/yr
-  upgrade  : 'https://muslimkidschecklist.gumroad.com/l/mtdviu',  // Second App Access — $25/yr
+  upgrade  : 'https://muslimkidschecklist.gumroad.com/l/mtdviu',  // Add one more app — $25/yr
+  addTwo   : '',                                                  // Add two more apps — $49/yr  <- PRODUCT NOT BUILT YET
   bundle   : 'https://muslimkidschecklist.gumroad.com/l/bkvfvr',  // All Three Apps — $89/yr
   email    : 'muslimkidschecklist@gmail.com',
   price    : '$40',
   upgPrice : '$25',
+  twoPrice : '$49',
   siblings : 'Spelling Quest or One Ayah At A Time',
   trialDays: 7
 };
 
 /* ---------------------------------------------------------------
-   WHICH PRODUCTS THIS APP ACCEPTS A KEY FOR.
+   LIST 1 OF 2 — KEYS THAT UNLOCK THIS APP.
 
-   Gumroad's verify endpoint is product-scoped: you must name the
-   product you are asking about. That is a real improvement over the
-   old setup, where "is this key valid?" was answerable by any key
-   from the same store — which meant a Spelling Quest key unlocked
-   this app. Here that cannot happen: a key only verifies against a
-   product it was actually issued for.
+   Getting this list wrong LOCKS OUT A PAYING CUSTOMER. Treat every
+   change here as the most expensive change in the file.
 
-   So this list IS the entitlement rule. Rebuilt 20 Aug 2026: each app
-   in the family (Spelling Quest, One Ayah At A Time, Muslim Kids
-   Checklist) now has its OWN three Gumroad products — Family Access,
-   Second App Access, and All Three Apps — instead of one shared
-   discount code and a reused bundle ID. This app accepts a key issued
-   for any of ITS OWN three products.
+   Portfolio policy, decided 21 Aug 2026 (Universal Files/
+   Gumroad-Setup-Runbook.md → "Cross-app key acceptance"):
+   this app accepts its OWN four products, plus every sibling app's
+   $25, $49 and $89 — but NOT a sibling's $40, which only ever buys
+   that sibling.
 
-   Still to add here: the other two apps' own "All Three Apps" bundle
-   product IDs, once Spelling Quest and One Ayah publish theirs — a
-   bundle key bought from either sibling app must also unlock this one.
-   Not yet received from that project as of 20 Aug.
+   The $25 and $49 products do not record which app the buyer picked,
+   so accepting them lets in someone who chose a different app. That
+   is deliberate. Accepting wrongly costs a little revenue from
+   somebody who has already paid us; refusing wrongly locks a paying
+   family out of an app they bought with no error that explains why.
+   A failure must never lock a paying family out.
+
+   `variantContains` (optional) narrows an entry to purchases whose
+   Gumroad variant names this app. Variants make NEW purchases
+   precise; the plain-id entries stay listed so anyone who bought
+   before the variants existed is never locked out later.
 
    Find each id in Gumroad: Products → the product → Content tab →
    Insert → License key block (a base64-looking string, NOT the
@@ -1505,11 +1535,50 @@ const BUY = {
    It must NOT ship with all entries empty.
    --------------------------------------------------------------- */
 const PRODUCTS = [
-  { id: '7e8uIMFPPfgCWGpda9OIsQ==', label: 'Muslim Kids Checklist — Family Access'      },
-  { id: 'MDGCYGOYZKbezd3K0JXnfg==', label: 'Muslim Kids Checklist — Second App Access'  },
-  { id: '32mLygvh97ZA0_hkLiqHSA==', label: 'Muslim Kids Checklist — All Three Apps'     }
-  // { id: '', label: 'Spelling Quest — All Three Apps' },   // <- add once known
-  // { id: '', label: 'One Ayah At A Time — All Three Apps' } // <- add once known
+  /* --- this app's own four --- */
+  { id: '7e8uIMFPPfgCWGpda9OIsQ==', label: 'Muslim Kids Checklist — Family Access'     },
+  { id: 'MDGCYGOYZKbezd3K0JXnfg==', label: 'Muslim Kids Checklist — Add one more app'  },
+  { id: '',                         label: 'Muslim Kids Checklist — Add two more apps' },  // $49 — NOT BUILT YET
+  { id: '32mLygvh97ZA0_hkLiqHSA==', label: 'Muslim Kids Checklist — All Three Apps'    },
+
+  /* --- Spelling Quest (IDs final 21 Aug; products still unpublished) --- */
+  { id: '-Kkbtx5LoSOHKvijvnUBMA==', label: 'Spelling Quest — Add one more app'  },
+  { id: 'D3bRQBthRlnS8BRwHt-w7A==', label: 'Spelling Quest — Add two more apps' },
+  { id: 'yL1qS3O7D10z5bb_dFOACg==', label: 'Spelling Quest — All Three Apps'    },
+  /* Spelling Quest — Family Access (a-vmFHoWlZ86_4FnmjP_0g==) is deliberately
+     NOT here: it buys Spelling Quest only. It belongs in the ownership list below. */
+
+  /* --- One Ayah At A Time — IDs still unknown. Permalinks, for whoever fetches them:
+         $25 /l/bumvs · $49 /l/gieimmq · $89 /l/auwpw
+         Until these are filled in, a family who buys One Ayah's "add one/two more"
+         cannot open this app. --- */
+  { id: '', label: 'One Ayah At A Time — Add one more app'  },
+  { id: '', label: 'One Ayah At A Time — Add two more apps' },
+  { id: '', label: 'One Ayah At A Time — All Three Apps'    }
+];
+
+/* ---------------------------------------------------------------
+   LIST 2 OF 2 — KEYS THAT ONLY PROVE OWNERSHIP.
+
+   Used to reveal the cheaper $25 / $49 checkout links to somebody who
+   already owns one of our apps. This list NEVER opens the app.
+
+   Getting this one wrong only shows the wrong price. It is the safe
+   list; PRODUCTS above is the dangerous one. Keep them separate.
+
+   Every sibling product belongs here, INCLUDING each app's $40 —
+   owning Spelling Quest's Family Access is exactly the thing that
+   earns you the cheaper price here.
+   --------------------------------------------------------------- */
+const OWNERSHIP_PRODUCTS = [
+  { id: 'a-vmFHoWlZ86_4FnmjP_0g==', label: 'Spelling Quest — Family Access'      },
+  { id: '-Kkbtx5LoSOHKvijvnUBMA==', label: 'Spelling Quest — Add one more app'   },
+  { id: 'D3bRQBthRlnS8BRwHt-w7A==', label: 'Spelling Quest — Add two more apps'  },
+  { id: 'yL1qS3O7D10z5bb_dFOACg==', label: 'Spelling Quest — All Three Apps'     },
+  { id: '', label: 'One Ayah At A Time — Family Access'      },   // /l/vcwkuz
+  { id: '', label: 'One Ayah At A Time — Add one more app'   },   // /l/bumvs
+  { id: '', label: 'One Ayah At A Time — Add two more apps'  },   // /l/gieimmq
+  { id: '', label: 'One Ayah At A Time — All Three Apps'     }    // /l/auwpw
 ];
 
 const GUM_API = 'https://api.gumroad.com/v2/licenses/verify';
@@ -1611,10 +1680,36 @@ async function checkKey(rawKey){
   for(const p of live){
     try{
       const d = await gumVerify(p.id, key);
-      if(d && d.success) return {ok:true, data:d, product:p, key};
+      if(d && d.success && variantOK(p, d)) return {ok:true, data:d, product:p, key};
     }catch(e){ networkFails++; }
   }
   return {ok:false, reason: networkFails ? 'network' : 'unknown', key};
+}
+
+/* An entry with no variantContains matches any purchase of that product —
+   which is what keeps pre-variant buyers working. An entry WITH one only
+   matches when the bought variant names this app. */
+function variantOK(p, d){
+  if(!p.variantContains) return true;
+  try{
+    const v = (d && d.purchase && d.purchase.variants) || '';
+    return String(v).toLowerCase().indexOf(String(p.variantContains).toLowerCase()) !== -1;
+  }catch(e){ return false; }
+}
+
+/* Does this key prove they already own one of our apps? Reveals the cheaper
+   checkout links ONLY — it never grants access, and a failure here is
+   harmless: the worst case is that somebody is shown the full price. */
+async function provesOwnership(rawKey){
+  const key = normKey(rawKey);
+  const live = OWNERSHIP_PRODUCTS.filter(p => p.id);
+  for(const p of live){
+    try{
+      const d = await gumVerify(p.id, key);
+      if(d && d.success) return {ok:true, product:p, key};
+    }catch(e){ /* ignore: showing the full price is the safe failure */ }
+  }
+  return {ok:false, key};
 }
 
 /* Is a verified purchase still entitled to access?
@@ -1686,6 +1781,155 @@ function hideGate(){ $('gateWrap').classList.remove('on'); }
 
 const CODEBOX = `<input class="gCode" id="gKey" placeholder="XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"
   autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">`;
+
+
+
+/* ================= Cross-device family sync =========================
+   Follows Universal Files/cross-device-sync-howto.md and the shape One Ayah
+   proved in production. No accounts, no login, no email: the licence key
+   IS the identity. Every device holding the same key computes the same
+   fingerprint and therefore sees the same family's data.
+
+   During the free trial there is no key, so there is no fingerprint and
+   NOTHING is sent anywhere — the trial is as private as an app with no
+   sync at all.
+
+   A sync failure must never interrupt a child mid-checklist. Every call
+   below is wrapped so any failure leaves the device exactly as it was and
+   the next natural trigger tries again.                                  */
+const SUPA_URL  = 'https://nkkckcnclqwpvvwujedg.supabase.co';
+const SUPA_KEY  = 'sb_publishable_jTvqG53LAS1LsP7A8evx2Q_RgekRHXZ';
+/* This salt must never match One Ayah's or Spelling Quest's. Same licence
+   key, different salt, unrelated fingerprint — the two apps' tables cannot
+   be cross-referenced even though it is the same family.                  */
+const SYNC_SALT = 'MuslimKidsChecklist/family/';
+
+let syncFp = null, syncing = false, syncTimer = null, applyingSync = false;
+
+function licKeyForSync(){
+  try{
+    const l = lread(LKEY);
+    if(!l || !l.key || l.dead) return null;
+    return l.key;
+  }catch(e){ return null; }
+}
+async function familyFp(){
+  const k = licKeyForSync();
+  if(!k) return null;
+  if(syncFp && syncFp.k === k) return syncFp.fp;
+  /* Upper-cased as well as stripped: normKey() keeps case, and a parent
+     typing their key in lower case on the second device must land on the
+     same fingerprint or that device silently becomes its own family.    */
+  const fp = await sha256Hex(SYNC_SALT + normKey(k).toUpperCase());
+  syncFp = {k, fp};
+  return fp;
+}
+async function rpc(fn, body){
+  const r = await fetch(SUPA_URL + '/rest/v1/rpc/' + fn, {
+    method : 'POST',
+    headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
+               'Content-Type': 'application/json' },
+    body   : JSON.stringify(body)
+  });
+  if(!r.ok) throw new Error('rpc ' + fn + ' ' + r.status);
+  const t = await r.text();
+  return t ? JSON.parse(t) : null;
+}
+
+/* Row key for one checkmark. The kid id belongs in here: two children can
+   have the same task on the same day and they are different checkmarks. */
+const rowKey = (wkey, kidId, k) => 'week:' + wkey + '|' + kidId + '|' + k;
+const weekKeyFor = w => (w === 'cur' ? WEEK_KEY : PREV_KEY);
+
+function localStampOf(w, kidId, k){
+  return (stamps[w] && stamps[w][kidId] && stamps[w][kidId][k]) || 0;
+}
+
+async function syncNow(){
+  if(syncing) return;
+  const fp = await familyFp();
+  if(!fp) return;
+  syncing = true;
+  let touched = false;
+  try{
+    const rows = (await rpc('pull_checklist', {p_fp: fp})) || [];
+    const seen = {};
+    applyingSync = true;
+
+    for(const row of rows){
+      seen[row.kind + ' ' + row.k] = row.updated_ms;
+
+      if(row.kind === 'cfg'){
+        if(row.updated_ms > (cfg.ts || 0) && row.val && row.val.kids && row.val.kids.length){
+          cfg = row.val; cfgSource = 'cloud'; backupCfg(); computeWeek();
+          if(!cfg.kids.some(k => k.id === kid)) kid = cfg.kids[0].id;
+          touched = true;
+        }
+        continue;
+      }
+
+      const parts = String(row.k).split('|');
+      if(parts.length !== 5) continue;
+      const wkey = parts[0].slice(5), kidId = parts[1];
+      const k = parts[2] + '|' + parts[3] + '|' + parts[4];
+      const w = wkey === WEEK_KEY ? 'cur' : (wkey === PREV_KEY ? 'prev' : null);
+      if(!w) continue;
+
+      if(row.updated_ms > localStampOf(w, kidId, k)){
+        if(!weeks[w][kidId]) weeks[w][kidId] = new Set();
+        const on = !!(row.val && row.val.on);
+        const had = weeks[w][kidId].has(k);
+        if(on) weeks[w][kidId].add(k); else weeks[w][kidId].delete(k);
+        stampCheck(w, kidId, k, row.updated_ms);
+        if(had !== on) touched = true;
+      }
+    }
+    applyingSync = false;
+
+    const pushes = [];
+    if((cfg.ts || 0) > (seen['cfg cfg'] || 0)){
+      pushes.push(rpc('push_checklist', {p_fp: fp, p_kind: 'cfg', p_k: 'cfg',
+        p_val: cfg, p_updated_ms: cfg.ts || Date.now()}));
+    }
+    for(const w of ['cur','prev']){
+      const wkey = weekKeyFor(w);
+      const byKid = stamps[w] || {};
+      for(const kidId in byKid){
+        for(const k in byKid[kidId]){
+          const ms = byKid[kidId][k];
+          const rk = rowKey(wkey, kidId, k);
+          if(ms > (seen['check ' + rk] || 0)){
+            const on = !!(weeks[w][kidId] && weeks[w][kidId].has(k));
+            pushes.push(rpc('push_checklist', {p_fp: fp, p_kind: 'check', p_k: rk,
+              p_val: {on: on}, p_updated_ms: ms}));
+          }
+        }
+      }
+    }
+    await Promise.all(pushes);
+
+    syncOK = true;
+    if(touched){ backupWeek(); backupStamps(); render(); }
+    setSync('saved');
+  }catch(e){
+    applyingSync = false;
+  }finally{
+    syncing = false;
+  }
+}
+
+function syncSoon(){
+  if(applyingSync) return;
+  if(syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(function(){ syncTimer = null; syncNow(); }, 2500);
+}
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) syncNow(); });
+window.addEventListener('online', function(){ syncNow(); });
+
+async function forgetFamily(){
+  try{ const fp = await familyFp(); if(fp) await rpc('forget_checklist', {p_fp: fp}); }
+  catch(e){}
+}
 
 
 /* ---- Starter packs ----------------------------------------------------
