@@ -324,7 +324,7 @@ body{background:var(--paper);background-image:radial-gradient(var(--card) 1.5px,
     <button class="ghost" id="btnPrint">🖨 Print</button>
     <button class="grown" id="btnParent"><span aria-hidden="true">⚙️</span> Grown-ups</button>
   </div>
-  <p class="hint"><span id="sync" class="sync">Saved</span> · Tap a box to check it off. Checks start fresh each week.</p>
+  <p class="hint"><span id="sync" class="sync">Saved</span><span id="hintRest"> · Tap a box to check it off. Checks start fresh each week.</span></p>
   <div id="board"></div>
 </div>
 
@@ -699,7 +699,20 @@ async function flush(){
   }
 }
 async function refresh(){
-  if(!HAS_CLOUD) return;            // nothing to check against; don't flash "Checking…" every minute
+  /* HAS_CLOUD is the ARTIFACT RUNTIME's storage, which does not exist on
+     GitHub Pages — so this returned immediately and the ↻ Refresh button, the
+     60-second poll and the tab-focus handler all quietly did nothing. Once
+     family sync shipped that became visible: two devices side by side never
+     updated until the page was physically reloaded. Route those callers to the
+     real sync instead. */
+  if(!HAS_CLOUD){
+    if(await familyFp()){                 // licensed: there is something to pull
+      setSync('syncing');
+      await syncNow();
+      setSync(dirty?'queued':'saved');
+    }
+    return;                                // on trial there is nothing to refresh
+  }
   setSync('syncing');
   const r=await readRaw(GK,true);
   if(r.ok){
@@ -714,9 +727,24 @@ async function refresh(){
   }
   render(); setSync(dirty?'queued':'saved');
 }
+/* On the free trial there is no key, so nothing syncs and nothing is sent
+   anywhere. Saying "Saved on this device" is true but tells a parent nothing
+   about what happens after they buy — so the trial gets its own line. */
+const TRIAL_NOTE = 'Your tasks are saved in this browser. Once you have a licence key they travel '
+                 + 'to your other devices on their own \u2014 and you can always save a copy to keep.';
+function onTrialOnly(){
+  try{ const l=lread(LKEY); return !(l && l.key && !l.dead); }catch(e){ return false; }
+}
 function setSync(m){
   const el=document.getElementById('sync'); if(!el) return;
+  const rest=document.getElementById('hintRest');
   el.dataset.mode=m;
+  if(onTrialOnly() && (m==='saved' || m==='queued')){
+    el.textContent = TRIAL_NOTE;
+    if(rest) rest.style.display='none';
+    return;
+  }
+  if(rest) rest.style.display='';
   el.textContent = m==='saving'?'Saving…' : m==='syncing'?'Checking…'
     : m==='queued'?'Saved here · sending shortly'
     : syncOK?'Saved · synced across devices':'Saved on this device';
@@ -1572,9 +1600,11 @@ const PRODUCTS = [
          $25 /l/bumvs · $49 /l/gieimmq · $89 /l/auwpw
          Until these are filled in, a family who buys One Ayah's "add one/two more"
          cannot open this app. --- */
-  { id: '', label: 'One Ayah At A Time — Add one more app'  },
-  { id: '', label: 'One Ayah At A Time — Add two more apps' },
-  { id: '', label: 'One Ayah At A Time — All Three Apps'    }
+  { id: '6TLtDTxe19Rgypj9kASU1A==', label: 'One Ayah At A Time — Second App Access' },
+  { id: 'Tdm6Qct7EyMbAC36l6-zMg==', label: 'One Ayah At A Time — Add Two Apps'      },
+  { id: 'wDMOSJIqK40DaP5STkK7Pw==', label: 'One Ayah At A Time — All Three Apps'    }
+  /* One Ayah's $40 (5K-rSAFj42TdAX3vIGNQsQ==) is deliberately NOT here — it buys
+     One Ayah alone. It is in the ownership list below. */
 ];
 
 /* ---------------------------------------------------------------
@@ -1595,10 +1625,10 @@ const OWNERSHIP_PRODUCTS = [
   { id: '-Kkbtx5LoSOHKvijvnUBMA==', label: 'Spelling Quest — Add one more app'   },
   { id: 'D3bRQBthRlnS8BRwHt-w7A==', label: 'Spelling Quest — Add two more apps'  },
   { id: 'yL1qS3O7D10z5bb_dFOACg==', label: 'Spelling Quest — All Three Apps'     },
-  { id: '', label: 'One Ayah At A Time — Family Access'      },   // /l/vcwkuz
-  { id: '', label: 'One Ayah At A Time — Add one more app'   },   // /l/bumvs
-  { id: '', label: 'One Ayah At A Time — Add two more apps'  },   // /l/gieimmq
-  { id: '', label: 'One Ayah At A Time — All Three Apps'     }    // /l/auwpw
+  { id: '5K-rSAFj42TdAX3vIGNQsQ==', label: 'One Ayah At A Time — Family Access'     },
+  { id: '6TLtDTxe19Rgypj9kASU1A==', label: 'One Ayah At A Time — Second App Access' },
+  { id: 'Tdm6Qct7EyMbAC36l6-zMg==', label: 'One Ayah At A Time — Add Two Apps'      },
+  { id: 'wDMOSJIqK40DaP5STkK7Pw==', label: 'One Ayah At A Time — All Three Apps'    }
 ];
 
 const GUM_API = 'https://api.gumroad.com/v2/licenses/verify';
