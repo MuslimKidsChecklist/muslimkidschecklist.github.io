@@ -11,14 +11,14 @@
 <meta property="og:url" content="https://muslimkidschecklist.github.io/">
 <meta property="og:title" content="Muslim Kids Checklist — a checklist that grows with your child">
 <meta property="og:description" content="Morning, after school and before bed, in pictures a young child can read on their own and words an older one can. Kindergarten through eighth grade. Seven days free.">
-<meta property="og:image" content="./og.png">
+<meta property="og:image" content="https://muslimkidschecklist.github.io/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Muslim Kids Checklist — a checklist that grows with your child">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Muslim Kids Checklist — a checklist that grows with your child">
 <meta name="twitter:description" content="Morning, after school and before bed, in pictures a young child can read on their own and words an older one can. Kindergarten through eighth grade. Seven days free.">
-<meta name="twitter:image" content="./og.png">
+<meta name="twitter:image" content="https://muslimkidschecklist.github.io/og.png">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -216,7 +216,7 @@ body{background:var(--paper);background-image:radial-gradient(var(--card) 1.5px,
   .printwrap{display:block!important;position:static;padding:0}
 }
 
-/* ---------- trial / licence gate ---------- */
+/* ---------- trial / license gate ---------- */
 #gateWrap{position:fixed;inset:0;z-index:9999;background:var(--paper);overflow:auto;display:none;padding:24px 16px 40px}
 #gateWrap.on{display:block}
 .ownWrap{margin:14px 0 6px;padding:14px;border:3px dashed var(--line);border-radius:16px}
@@ -255,6 +255,8 @@ body{background:var(--paper);background-image:radial-gradient(var(--card) 1.5px,
 .gMsg.err{color:#C2354F}.gMsg.ok{color:#1E8C63}
 .gFoot{max-width:560px;margin:18px auto 0;text-align:center;font-size:.82rem;color:var(--ink-soft);line-height:1.7;display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:center}
 .gFoot a{color:var(--ink-soft)}
+.gFoot a.buyLink{color:#B57A00;font-weight:800;text-decoration:none}
+.gFoot a.buyLink:hover{text-decoration:underline}
 #trialBar{display:none;text-align:center;font-size:.85rem;padding:7px 12px;background:#FFF4D8;border-bottom:2px solid var(--line);color:#6b5a1f}
 #trialBar.on{display:block}
 #trialBar a{color:#6b5a1f;font-weight:700}
@@ -294,9 +296,10 @@ body{background:var(--paper);background-image:radial-gradient(var(--card) 1.5px,
 </head>
 <body>
 <div id="trialBar"></div>
+<div class="gFoot" id="appFoot" style="display:none"></div>
 <div id="gateWrap"><div class="gateCard" id="gateCard"></div>
 <div class="gFoot">
-  <a href="about.html">About</a> <a href="contact.html">Contact</a>
+  <a href="about.html">About</a> <a href="schools.html">Schools</a> <a href="contact.html">Contact</a>
   <a href="privacy.html">Privacy</a> <a href="terms.html">Terms</a> <a href="refunds.html">Refunds</a>
 </div></div>
 
@@ -664,7 +667,7 @@ async function load(){
   if(cfgDirty) schedule();
   render(); setSync('saved');
   dataReady=true;
-  syncNow();          // first pull of the family's data, if this device holds a licence
+  syncNow();          // first pull of the family's data, if this device holds a license
 }
 
 function save(){ backupWeek(); backupStamps(); dirty=true; setSync('saving'); schedule(); syncSoon(); }
@@ -730,10 +733,33 @@ async function refresh(){
 /* On the free trial there is no key, so nothing syncs and nothing is sent
    anywhere. Saying "Saved on this device" is true but tells a parent nothing
    about what happens after they buy — so the trial gets its own line. */
-const TRIAL_NOTE = 'Your tasks are saved in this browser. Once you have a licence key they travel '
+const TRIAL_NOTE = 'Your tasks are saved in this browser. Once you have a license key they travel '
                  + 'to your other devices on their own \u2014 and you can always save a copy to keep.';
 function onTrialOnly(){
   try{ const l=lread(LKEY); return !(l && l.key && !l.dead); }catch(e){ return false; }
+}
+/* The in-app footer. Per Universal Files/Buy-Now-Link-In-App.md this carries a
+   gold "Buy now" as the first item, and it renders ONLY during the free week —
+   never for a paid licence and never for a hand-issued access code. "Buy now"
+   at the bottom of an app somebody already paid for reads as a bug or a nag,
+   and code holders were given the app deliberately.
+
+   Unlike One Ayah, this app had no footer at all before, so the whole row is
+   trial-only rather than always-on with a conditional link. Flip the early
+   return if the policy links should show for everyone. */
+function showAppFoot(trial){
+  const f = document.getElementById('appFoot');
+  if(!f) return;
+  if(!trial){ f.style.display='none'; f.innerHTML=''; return; }
+  const buy = buyHref('checkout');
+  const buyHtml = buy
+    ? `<a class="buyLink" href="${buy.href}"${buy.ext?' target="_blank" rel="noopener"':''}>Buy now</a>`
+    : '';
+  f.innerHTML = buyHtml +
+    '<a href="about.html">About</a> <a href="schools.html">Schools</a> <a href="contact.html">Contact</a> ' +
+    '<a href="privacy.html">Privacy</a> <a href="terms.html">Terms</a> ' +
+    '<a href="refunds.html">Refunds</a>';
+  f.style.display='';
 }
 function setSync(m){
   const el=document.getElementById('sync'); if(!el) return;
@@ -1785,7 +1811,7 @@ function deadReason(pur){
   if(pur.disputed === true && pur.dispute_won !== true) return 'disputed';
   if(pur.subscription_ended_at)                    return 'ended';
   if(pur.subscription_failed_at)                   return 'failed';
-  return null;                                     // cancelled-but-not-ended is still active
+  return null;                                     // canceled-but-not-ended is still active
 }
 
 function licState(){
@@ -1841,7 +1867,7 @@ const CODEBOX = `<input class="gCode" id="gKey" placeholder="XXXXXXXX-XXXXXXXX-X
 
 /* ================= Cross-device family sync =========================
    Follows Universal Files/cross-device-sync-howto.md and the shape One Ayah
-   proved in production. No accounts, no login, no email: the licence key
+   proved in production. No accounts, no login, no email: the license key
    IS the identity. Every device holding the same key computes the same
    fingerprint and therefore sees the same family's data.
 
@@ -1854,7 +1880,7 @@ const CODEBOX = `<input class="gCode" id="gKey" placeholder="XXXXXXXX-XXXXXXXX-X
    the next natural trigger tries again.                                  */
 const SUPA_URL  = 'https://nkkckcnclqwpvvwujedg.supabase.co';
 const SUPA_KEY  = 'sb_publishable_jTvqG53LAS1LsP7A8evx2Q_RgekRHXZ';
-/* This salt must never match One Ayah's or Spelling Quest's. Same licence
+/* This salt must never match One Ayah's or Spelling Quest's. Same license
    key, different salt, unrelated fingerprint — the two apps' tables cannot
    be cross-referenced even though it is the same family.                  */
 const SYNC_SALT = 'MuslimKidsChecklist/family/';
@@ -2145,7 +2171,7 @@ function screenExpired(dead){
   ${buyButton('Unlock for a year','checkout')}
 
   <!-- Same ownership gate as the welcome screen. This one is seen only by
-       somebody whose licence for THIS app lapsed, but the $25/$49 tiers still
+       somebody whose license for THIS app lapsed, but the $25/$49 tiers still
        require owning one of the OTHER apps, so they are hidden here too. -->
   <div class="ownWrap">
     <p class="gSmall">Already using ${BUY.siblings}? Paste that app's key for your price.</p>
@@ -2283,6 +2309,7 @@ function gateSwitch(){
 }
 
 function gateInit(){
+  showAppFoot(false);        // hidden by default on every path; only the trial branch turns it on
   if(gateInit._sw===undefined) gateInit._sw=gateSwitch();
   if(gateInit._sw==='expired'){ $('trialBar').classList.remove('on'); showGate(screenExpired()); return; }
   const L=licState();
@@ -2305,6 +2332,7 @@ function gateInit(){
       : `${t.left} days left in your free trial · <a href="#" id="tbBuy">Unlock for a year</a>`;
     const tb=document.getElementById('tbBuy');
     if(tb) tb.onclick=e=>{e.preventDefault();showGate(screenExpired());};
+    showAppFoot(true);
     return;
   }
   $('trialBar').classList.remove('on');
