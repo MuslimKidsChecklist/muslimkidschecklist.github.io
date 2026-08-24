@@ -1,3 +1,32 @@
+/* ============================================================================
+   ⚠️  THIS FILE IS STALE. `index.html` IS THE LIVE SOURCE OF TRUTH.
+   ============================================================================
+   `_gate/` was originally the authoring source, inlined into index.html by
+   hand. index.html has since moved a long way ahead and this file has NOT
+   kept up. As of 23 Aug 2026 it is missing, at least:
+
+     - the hand-issued access-code path (codeOk / CODE_HASHES)
+     - the $49 "Add Two More Apps" product and BUY.addTwo
+     - Spelling Quest's and One Ayah's product IDs
+     - OWNERSHIP_PRODUCTS entirely (the second, price-reveal-only list)
+     - variantOK() variant matching
+     - the ownership-gated $25/$49 checkout UI
+     - the trial-only in-app "Buy now" footer
+     - the whole Supabase cross-device sync client
+
+   🔴 DO NOT RE-INLINE THIS FILE INTO index.html. Doing so would silently
+   revert every one of the above — including the $40 product ID, which was
+   WRONG here (an uppercase `I` where Gumroad issues a lowercase `l`) until
+   23 Aug. That single character locks out every Family Access buyer, and
+   nothing in any dashboard shows it: Gumroad's verify endpoint returns the
+   same "That license does not exist for the provided product" for a wrong
+   product ID as for a wrong customer key, so it reaches you as "my key
+   doesn't work."
+
+   Edit index.html directly. If this file is ever to be the source again, it
+   must first be rebuilt FROM index.html, not the other way round.
+   ============================================================================ */
+
 
 /* ================= trial + license gate — GUMROAD =================
    Moved off Lemon Squeezy on 18 Aug 2026 after a second, final rejection.
@@ -48,7 +77,7 @@ const BUY = {
    It must NOT ship with all entries empty.
    --------------------------------------------------------------- */
 const PRODUCTS = [
-  { id: '7e8uIMFPPfgCWGpda9OIsQ==', label: 'Muslim Kids Checklist — Family Access'      },
+  { id: '7e8ulMFPPfgCWGpda9OIsQ==', label: 'Muslim Kids Checklist — Family Access'      },
   { id: 'MDGCYGOYZKbezd3K0JXnfg==', label: 'Muslim Kids Checklist — Second App Access'  },
   { id: '32mLygvh97ZA0_hkLiqHSA==', label: 'Muslim Kids Checklist — All Three Apps'     }
   // { id: '', label: 'Spelling Quest — All Three Apps' },   // <- add once known
