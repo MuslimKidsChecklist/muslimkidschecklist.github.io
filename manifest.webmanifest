@@ -1,0 +1,22 @@
+{
+  "name": "Muslim Kids Checklist",
+  "short_name": "Checklist",
+  "description": "A picture-led checklist for children who can't read yet. Morning, after school and before bed.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EAF0F6",
+  "theme_color": "#EAF0F6",
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "prefer_related_applications": false,
+  "related_applications": [
+    { "platform": "webapp", "url": "./manifest.webmanifest", "id": "https://muslimkidschecklist.github.io/" }
+  ]
+}
