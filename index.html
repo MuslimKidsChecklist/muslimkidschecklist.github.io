@@ -594,8 +594,76 @@ function setCheck(k, on){
 }
 function backupWeek(){ try{ localStorage.setItem('bk:'+ck(activeKey()), packWeek(weekMode)); }catch(e){} }
 function backupCfg(){ try{ localStorage.setItem(LCFG, JSON.stringify(cfg)); }catch(e){} }
-function localCfg(){ try{ const r=localStorage.getItem(LCFG); if(!r) return null;
-  const c=JSON.parse(r); return (c&&c.kids&&c.kids.length)?c:null; }catch(e){ return null; } }
+/* Rolling copies of the last few WORKING setups, under their own key.
+   backupCfg() writes to the same key it would overwrite, so it has never
+   protected anything. These are only ever written for a config that has a
+   child with at least one task, so a demo child can never become the
+   "known good" copy.                                                      */
+const SNAPS = LCFG + ':snaps';
+const LASTFAIL = LCFG + ':lastfail';
+let cfgFailReason = '';
+
+/* Per-child timestamps. The family used to travel as ONE config row, so any
+   device that got into a bad state replaced every child at once. Spelling
+   Quest and One Ayah both sync a row per child and refuse to send one nobody
+   has used; this brings that here. A child now carries its own `kts`, set
+   only when that child actually changed, so two devices editing two different
+   children no longer fight, and a bad device can at worst damage the children
+   it holds.                                                                */
+let kidSig = {};
+function stampKids(now){
+  now = now || Date.now();
+  for(const k of cfg.kids){
+    const before = JSON.stringify({...k, kts:0});
+    if(kidSig[k.id] !== before){ k.kts = now; kidSig[k.id] = before; }
+  }
+}
+function seedKidSig(){
+  kidSig = {};
+  for(const k of (cfg.kids||[])){
+    if(!k.kts) k.kts = cfg.ts || Date.now();   // families from before per-child rows publish once
+    kidSig[k.id] = JSON.stringify({...k, kts:0});
+  }
+}
+/* A removed child has to travel too, or the other devices just put it back. */
+function tombstoneKid(id){
+  if(!cfg.gone) cfg.gone = {};
+  cfg.gone[id] = Date.now();
+}
+function totalTasks(c){ return ((c && c.kids) || []).reduce((n,k)=>n+((k.tasks||[]).length),0); }
+function snapshotCfg(){
+  try{
+    if(!cfg || !cfg.kids || !cfg.kids.length || !totalTasks(cfg)) return;
+    const body = JSON.stringify(cfg);
+    const s = JSON.parse(localStorage.getItem(SNAPS) || '[]');
+    if(s.length && s[0].body === body) return;
+    s.unshift({ts: Date.now(), body});
+    localStorage.setItem(SNAPS, JSON.stringify(s.slice(0,5)));
+  }catch(e){}
+}
+function localCfg(){
+  try{
+    const r = localStorage.getItem(LCFG);
+    if(r == null){ cfgFailReason = 'missing'; return null; }
+    if(!r){ cfgFailReason = 'empty'; return null; }
+    let c; try{ c = JSON.parse(r); }
+    catch(e){ cfgFailReason = 'unparseable:' + r.length; return null; }
+    if(!c || !c.kids){ cfgFailReason = 'no-kids-field'; return null; }
+    if(!c.kids.length){ cfgFailReason = 'zero-children'; return null; }
+    cfgFailReason = ''; return c;
+  }catch(e){ cfgFailReason = 'storage-threw:' + ((e && e.name) || 'unknown'); return null; }
+}
+/* Record WHY a read failed, in its own key, so the next time this happens
+   anyone can see whether the setup was evicted, truncated or refused rather
+   than guessing. Two wipes have been investigated without this.           */
+function noteReadFailure(){
+  try{
+    const log = JSON.parse(localStorage.getItem(LASTFAIL) || '[]');
+    log.unshift({at: Date.now(), why: cfgFailReason || 'unknown',
+                 lic: !!localStorage.getItem(LKEY), ua: (navigator.userAgent||'').slice(0,120)});
+    localStorage.setItem(LASTFAIL, JSON.stringify(log.slice(0,10)));
+  }catch(e){}
+}
 
 /* The artifact runtime supplies window.storage; a plain web page does not.
    Without this check the app spends ~1.8s retrying an API that will never
@@ -649,7 +717,16 @@ async function load(){
     cfg.ts=Date.now(); cfgSource='cloud'; cfgDirty=true;
   }
   if(tidy()){ cfg.ts=Date.now(); cfgDirty=true; }   // strip stray spaces and save the clean copy once
-  backupCfg();
+  /* cfgSource is still 'defaults' only when NOTHING could be read. cfg is the
+     demo child here, and writing it would destroy the very setup we failed to
+     parse — which is exactly how a family lost both children on 9 September
+     2026. Leave the stored copy alone; syncNow() brings the real one back.
+     (cfgLocked is not usable as a guard: readRaw always fails on a plain web
+     page, so cfgLocked is true on every single load.)                      */
+  if(cfgSource !== 'defaults') backupCfg();
+  else noteReadFailure();
+  seedKidSig();
+  snapshotCfg();
   computeWeek();
   if(!cfg.kids.some(k=>k.id===kid)) kid=cfg.kids[0].id;
 
@@ -672,7 +749,7 @@ async function load(){
 }
 
 function save(){ backupWeek(); backupStamps(); dirty=true; setSync('saving'); schedule(); syncSoon(); }
-function saveCfg(){ cfg.ts=Date.now(); backupCfg(); cfgDirty=true; dirty=true; setSync('saving'); schedule(); syncSoon(); }
+function saveCfg(){ cfg.ts=Date.now(); stampKids(cfg.ts); backupCfg(); snapshotCfg(); cfgDirty=true; dirty=true; setSync('saving'); schedule(); syncSoon(); }
 
 function schedule(){
   if(timer||writing) return;
@@ -1079,7 +1156,15 @@ function renderPanel(){
      artifact. It told paying parents, in red, that their settings were not
      saved — when they are, on their own device. Replaced with the truth.  */
   const noStore = !HAS_CLOUD;
-  st.textContent = noStore
+  /* noStore is ALWAYS true on the live site, so every branch below it was dead
+     code: a device that failed to read its setup still showed the green
+     "Saved on this device" line, and the Retry button never appeared. The
+     parent had no way to know anything was wrong before editing.           */
+  let hadStored = false; try{ hadStored = localStorage.getItem(LCFG) != null; }catch(e){}
+  const lostSetup = cfgSource === 'defaults' && (hadStored || !!licKeyForSync());
+  st.textContent = lostSetup
+    ? '⚠︎ Could not read your saved setup on this device — this is the starting one. Do NOT edit here: tap "Try reading saved settings again", or Restore a backup.'
+    : noStore
     ? '✓ Saved on this device. Devices don\u2019t share a setup yet — use “Save a backup” to move it to another one.'
     : cfgLocked
     ? '⚠︎ Could not reach saved settings — showing this device\u2019s copy. Changes will not be sent until it reconnects.'
@@ -1088,8 +1173,8 @@ function renderPanel(){
     : cfgSource==='cloud'  ? '✓ Showing your saved setup.'
     : cfgSource==='device' ? '⟳ Restored from this device and re-saving.'
     : '⚠︎ No saved setup found — showing the original one. If you had changes, tap Restore and paste a backup instead of editing.';
-  st.style.color = (noStore || (cfgSource==='cloud' && sharedCfgOK!==false && !cfgLocked)) ? '#0DB14B' : '#C9234A';
-  const rt=$('btnRetry'); if(rt) rt.style.display = (cfgLocked && !noStore) ? 'inline-block' : 'none';
+  st.style.color = (!lostSetup && (noStore || (cfgSource==='cloud' && sharedCfgOK!==false))) ? '#0DB14B' : '#C9234A';
+  const rt=$('btnRetry'); if(rt) rt.style.display = lostSetup ? 'inline-block' : 'none';
 
   const kr=$('kidRow'); kr.style.display = isBoth() ? 'none' : '';
   if(!isBoth()){ $('kidName').value=pKidObj().name||''; }
@@ -1269,6 +1354,7 @@ $('btnDelKid').onclick=()=>{
   const i=cfg.kids.findIndex(k=>k.id===pKid); if(i<0) return;
   const msg=$('kidMsg');
   if(msg.dataset.arm!==pKid){ msg.dataset.arm=pKid; msg.textContent=`Tap again to remove ${cfg.kids[i].name} and all their tasks.`; msg.style.color='#C9234A'; return; }
+  tombstoneKid(cfg.kids[i].id);
   cfg.kids.splice(i,1); msg.dataset.arm=''; msg.textContent='';
   pKid=cfg.kids[0].id; kid=cfg.kids[0].id;
   saveCfg(); renderPanel(); render();
@@ -1958,19 +2044,35 @@ async function syncNow(){
   try{
     const rows = (await rpc('pull_checklist', {p_fp: fp})) || [];
     const seen = {};
+    let cloudCfg = null;
+    const kidRows = [];
+    const todayKey = new Date().toISOString().slice(0,10);
+    let histToday = null;
     applyingSync = true;
 
     for(const row of rows){
       seen[row.kind + ' ' + row.k] = row.updated_ms;
 
       if(row.kind === 'cfg'){
-        if(row.updated_ms > (cfg.ts || 0) && row.val && row.val.kids && row.val.kids.length){
-          cfg = row.val; cfgSource = 'cloud'; backupCfg(); computeWeek();
+        if(row.val && row.val.kids && row.val.kids.length) cloudCfg = row.val;
+        /* cfgSource==='defaults' means this device has no setup of its own —
+           it is showing the demo child. The family's record always wins in
+           that state, whatever the timestamps say. Without this, one tap on a
+           device that came up empty stamps the demo config with a fresh time,
+           the pull then refuses to restore, and the push below wipes everyone. */
+        if((row.updated_ms > (cfg.ts || 0) || cfgSource === 'defaults') && row.val && row.val.kids && row.val.kids.length){
+          cfg = row.val; cfgSource = 'cloud'; cfgLocked = false; backupCfg(); snapshotCfg(); computeWeek();
           if(!cfg.kids.some(k => k.id === kid)) kid = cfg.kids[0].id;
           touched = true;
         }
         continue;
       }
+
+      /* One row per child. These are applied on top of the config row, so a
+         device still running the old single-blob build keeps working while
+         the family is mixed.                                              */
+      if(row.kind === 'kid'){ kidRows.push(row); continue; }
+      if(row.kind === 'cfghist'){ if(row.k === todayKey) histToday = row.val; continue; }
 
       const parts = String(row.k).split('|');
       if(parts.length !== 5) continue;
@@ -1988,13 +2090,81 @@ async function syncNow(){
         if(had !== on) touched = true;
       }
     }
+    /* Apply the per-child rows. Only when this device holds a real setup:
+       on the demo config the whole family has already been taken from the
+       cfg row above, and merging into defaults would mix two families.   */
+    if(kidRows.length && cfgSource !== 'defaults'){
+      const before = JSON.stringify(cfg.kids);
+      let changedKids = false;
+      for(const row of kidRows){
+        const id = row.k;
+        const i = cfg.kids.findIndex(k => k.id === id);
+        const goneAt = (cfg.gone && cfg.gone[id]) || 0;
+        if(row.val && row.val.removed){
+          if(i >= 0 && row.updated_ms > (cfg.kids[i].kts || 0)){ cfg.kids.splice(i,1); changedKids = true; }
+          continue;
+        }
+        if(!row.val || !row.val.id || !(row.val.tasks||[]).length) continue;
+        if(goneAt > row.updated_ms) continue;                    // removed here, and more recently
+        if(i < 0){ cfg.kids.push(row.val); changedKids = true; }
+        else if(row.updated_ms > (cfg.kids[i].kts || 0)){ cfg.kids[i] = row.val; changedKids = true; }
+      }
+      if(changedKids){
+        if(!cfg.kids.length){ cfg.kids = JSON.parse(before); }   // never leave a family with no children
+        if(!cfg.kids.some(k => k.id === kid)) kid = cfg.kids[0].id;
+        seedKidSig(); backupCfg(); snapshotCfg(); computeWeek(); touched = true;
+      }
+    }
     applyingSync = false;
 
     const pushes = [];
-    if((cfg.ts || 0) > (seen['cfg cfg'] || 0)){
+    /* Three things have to be true before this device is allowed to replace
+       the whole family's setup. Spelling Quest has always refused to send a
+       child nobody has used; this is the same idea for a whole config.
+         - the setup was actually read, not fallen back to the demo child
+         - at least one of its children is one the family already has, so a
+           device showing a stranger's setup can never overwrite theirs
+       A parent removing a child or clearing tasks still syncs normally: those
+       ids overlap, and cfgSource is 'cloud'.                                */
+    const cloudIds = new Set(((cloudCfg && cloudCfg.kids) || []).map(k => k.id));
+    const sameFamily = cloudIds.size === 0 || cfg.kids.some(k => cloudIds.has(k.id));
+    const mayPushCfg = cfgSource !== 'defaults' && sameFamily;
+    if(mayPushCfg && (cfg.ts || 0) > (seen['cfg cfg'] || 0)){
       pushes.push(rpc('push_checklist', {p_fp: fp, p_kind: 'cfg', p_k: 'cfg',
         p_val: cfg, p_updated_ms: cfg.ts || Date.now()}));
     }
+    /* Per-child rows, tombstones, and one dated copy of the whole setup a
+       day. The daily copy is the undo: `cfghist` rows are keyed by date, so
+       a year of history costs at most 365 rows and a bad day can always be
+       read back.                                                          */
+    if(mayPushCfg){
+      for(const k of cfg.kids){
+        if(!((k.tasks || []).length)) continue;        // never send a child nobody has set up
+        if((k.kts || 0) > (seen['kid ' + k.id] || 0)){
+          pushes.push(rpc('push_checklist', {p_fp: fp, p_kind: 'kid', p_k: k.id,
+            p_val: k, p_updated_ms: k.kts}));
+        }
+      }
+      for(const id in (cfg.gone || {})){
+        const ms = cfg.gone[id];
+        if(ms > (seen['kid ' + id] || 0)){
+          pushes.push(rpc('push_checklist', {p_fp: fp, p_kind: 'kid', p_k: id,
+            p_val: {id: id, removed: true}, p_updated_ms: ms}));
+        }
+      }
+      /* Today's history row is only replaced by something at least as complete.
+         Otherwise a device that lost one child would quietly overwrite the good
+         copy taken earlier the same day, and the undo would be a day older than
+         it looks.                                                             */
+      const shrunk = histToday
+        && ((cfg.kids.length < (histToday.kids || []).length)
+            || (totalTasks(cfg) < totalTasks(histToday)));
+      if(totalTasks(cfg) && !shrunk && (cfg.ts || 0) > (seen['cfghist ' + todayKey] || 0)){
+        pushes.push(rpc('push_checklist', {p_fp: fp, p_kind: 'cfghist', p_k: todayKey,
+          p_val: cfg, p_updated_ms: cfg.ts || Date.now()}));
+      }
+    }
+
     for(const w of ['cur','prev']){
       const wkey = weekKeyFor(w);
       const byKid = stamps[w] || {};
