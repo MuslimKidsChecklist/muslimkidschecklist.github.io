@@ -1,0 +1,25 @@
+:root{--ink:#2B2436;--soft:#6E6580;--paper:#EAF0F6;--card:#fff;--line:#2B2436;--after:#1E8C63;
+--display:ui-rounded,'SF Pro Rounded','Trebuchet MS',system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 var(--display);padding:28px 16px 60px}
+.wrap{max-width:680px;margin:0 auto}
+header.brand{display:flex;align-items:center;gap:9px;margin-bottom:22px}
+header.brand img.brand-icon{width:28px;height:28px;display:block}
+header.brand b{font-size:1.05rem}
+header.brand a{margin-left:auto;color:var(--soft);font-size:.88rem;text-decoration:none;font-weight:700}
+header.brand a:hover{text-decoration:underline}
+main{background:var(--card);border:3px solid var(--line);border-radius:18px;box-shadow:4px 4px 0 var(--line);padding:30px 26px}
+h1{font-size:1.7rem;margin:0 0 4px}
+h2{font-size:1.15rem;margin:26px 0 6px}
+.kicker{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--soft);margin-bottom:12px}
+.upd{color:var(--soft);font-size:.88rem;margin:0 0 18px}
+p,li{color:var(--ink)}
+ul{padding-left:20px}
+.box{background:#F4F0FB;border:2px solid #d8d2e4;border-radius:12px;padding:14px 16px;margin:18px 0}
+.box p:last-child,.box ul:last-child{margin-bottom:0}
+a{color:#5B45C8}
+.big{display:inline-block;background:#F6A93B;border:3px solid var(--line);border-radius:14px;padding:13px 22px;
+  color:#2B2436;font-weight:800;text-decoration:none;margin-top:10px;box-shadow:4px 4px 0 var(--line)}
+footer{max-width:680px;margin:22px auto 0;text-align:center;color:var(--soft);font-size:.84rem;line-height:1.8;
+  display:flex;flex-wrap:wrap;gap:6px 14px;justify-content:center}
+footer a{color:var(--soft)}
