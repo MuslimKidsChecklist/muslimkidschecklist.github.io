@@ -29,3 +29,17 @@ index-v*.html
 # Artifact of a failed git init through the Cowork mount (16 Aug).
 # Safe to delete the folder itself in Finder.
 _BROKEN-git-DELETE-ME/
+
+# TASK-382: these six were renamed to *.SUPERSEDED.txt so GitHub Pages cannot
+# serve them. The original filenames still sit in this folder on Kathryn's
+# machine, untracked. A "stage everything" commit put them straight back on
+# 14 September and undid the fix. Ignored so that cannot happen again.
+_gate/gate.css
+_gate/gate.html
+_gate/gate.js
+_gate/gate.test.js
+_gate/tour.css
+_gate/tour.js
+
+# Nothing in here is part of the site.
+_to_delete/
