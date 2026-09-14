@@ -353,6 +353,7 @@ body{background:var(--paper);background-image:radial-gradient(var(--card) 1.5px,
       <div style="width:100%;display:flex;gap:8px;flex-wrap:wrap">
         <button class="mini" id="btnBackup">Save a backup</button>
         <button class="mini" id="btnRestore">Restore a backup</button>
+        <button class="mini" id="btnHistory">Go back to a day</button>
         <button class="mini" id="btnTour">Show me around again</button>
         <button class="mini" id="btnSignOut">Sign out</button>
         <button class="mini" id="btnForget">Stop syncing &amp; remove</button>
@@ -390,6 +391,31 @@ body{background:var(--paper);background-image:radial-gradient(var(--card) 1.5px,
           </ol>
         </div>
         <p class="pnote" id="ioMsg" style="font-weight:800"></p>
+      </div>
+
+      <div id="histBox" style="display:none;margin:12px 0 16px">
+        <p class="pnote" id="histMsg" style="font-weight:800"></p>
+        <div id="histList"></div>
+        <div id="histPrev" style="display:none;border:3px solid var(--line);border-radius:12px;padding:10px;margin-top:8px">
+          <p class="pnote" id="histPrevBody" style="margin:0 0 8px;font-weight:700;line-height:1.5"></p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="solid" id="btnHistGo">Put this day back</button>
+            <button class="mini" id="btnHistCancel">Cancel</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button class="mini" id="btnHistUndo" style="display:none">Undo the restore</button>
+          <button class="mini" id="btnHistClose">Close</button>
+        </div>
+        <div class="steps" id="histSteps">
+          <strong style="font-size:12.5px;color:#14532D">About these days</strong>
+          <ol>
+            <li>Your checklist saves itself once a day, on its own. You do not have to do anything.</li>
+            <li>Pick a day above to see what comes back before anything changes.</li>
+            <li>Putting a day back changes every device in your family.</li>
+            <li>If you change your mind, <strong>Undo the restore</strong> puts things straight back.</li>
+          </ol>
+        </div>
       </div>
 
       <div class="setrow">
@@ -1446,6 +1472,179 @@ $('btnApply').onclick=()=>{
   msg.style.color='#0DB14B';
   computeWeek(); renderPanel(); render();
 };
+/* ---------- go back to an earlier day (TASK-402) ----------
+   The app writes one dated copy of the whole setup a day (`cfghist`, see
+   syncNow). Until this screen existed, nothing read them back: recovering a
+   lost day meant querying the store by hand. A parent cannot do that, and
+   asking one to take a manual backup every evening is not a recovery story —
+   a school night can add five tasks in half an hour.                        */
+let histRows = [], histLoaded = false, histPick = -1;
+const PRERESTORE = LCFG + ':prerestore';
+const MONTHS = ['January','February','March','April','May','June',
+                'July','August','September','October','November','December'];
+function hesc(t){ return String(t).replace(/[&<>"]/g, function(c){
+  return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+function histPretty(d){
+  const today = new Date().toISOString().slice(0,10);
+  const yday = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+  if(d === today) return 'Today';
+  if(d === yday) return 'Yesterday';
+  const p = String(d).split('-');
+  if(p.length !== 3) return String(d);
+  const same = p[0] === String(new Date().getFullYear());
+  return (+p[2]) + ' ' + (MONTHS[+p[1]-1] || p[1]) + (same ? '' : ' ' + p[0]);
+}
+function cfgSummary(c){
+  const ks = (c && c.kids) || [];
+  if(!ks.length) return 'no children';
+  return ks.map(function(k){
+    const n = (k.tasks || []).length;
+    return k.name + ' ' + n + (n === 1 ? ' task' : ' tasks');
+  }).join(', ');
+}
+/* What a parent needs to see BEFORE anything changes: what comes back, and
+   what they would be giving up. Never a silent replace.                     */
+function histDiff(from){
+  const now = {}, then = {}, back = [], lose = [];
+  for(const k of (cfg.kids || [])) now[k.id] = k;
+  for(const k of ((from && from.kids) || [])) then[k.id] = k;
+  for(const id in then){
+    const t = then[id], n = now[id];
+    const tn = (t.tasks || []).length;
+    if(!n){ back.push(t.name + ' comes back, with ' + tn + (tn === 1 ? ' task' : ' tasks')); continue; }
+    const nn = (n.tasks || []).length;
+    if(tn > nn) back.push(t.name + ': ' + nn + ' → ' + tn + (tn === 1 ? ' task' : ' tasks') + ' (' + (tn - nn) + ' back)');
+    else if(tn < nn) lose.push(t.name + ': ' + nn + ' → ' + tn + (tn === 1 ? ' task' : ' tasks') + ' (' + (nn - tn) + ' removed)');
+  }
+  for(const id in now){
+    if(then[id]) continue;
+    const n = now[id], nn = (n.tasks || []).length;
+    lose.push(n.name + ' is removed, with ' + nn + (nn === 1 ? ' task' : ' tasks'));
+  }
+  return {back: back, lose: lose};
+}
+function preRestore(){
+  try{
+    const r = JSON.parse(localStorage.getItem(PRERESTORE) || 'null');
+    return (r && r.body) ? r : null;
+  }catch(e){ return null; }
+}
+const histBox = $('histBox');
+function renderHistList(){
+  const box = $('histList'), msg = $('histMsg');
+  $('histPrev').style.display = 'none'; histPick = -1;
+  const pre = preRestore();
+  $('btnHistUndo').style.display = pre ? 'inline-block' : 'none';
+  $('btnHistUndo').textContent = 'Undo the restore — put it back how it was';
+  if(!licKeyForSync()){
+    msg.textContent = 'These daily copies are saved with your sync, so this needs your code entered first. Once it is, they start from that day.';
+    msg.style.color = 'var(--ink-soft)'; box.innerHTML = ''; return;
+  }
+  if(!histRows.length){
+    msg.textContent = histLoaded
+      ? 'No earlier days saved yet — your copies start from today. Come back tomorrow.'
+      : 'Looking for your saved days…';
+    msg.style.color = 'var(--ink-soft)'; box.innerHTML = ''; return;
+  }
+  msg.textContent = 'Pick the day you want back. Nothing changes until you confirm.';
+  msg.style.color = 'var(--ink-soft)';
+  box.innerHTML = histRows.map(function(r, i){
+    return '<button class="mini histday" data-i="' + i + '" style="display:block;width:100%;'
+      + 'text-align:left;margin:0 0 6px"><strong>' + hesc(histPretty(r.d)) + '</strong> — '
+      + hesc(cfgSummary(r.val)) + '</button>';
+  }).join('');
+}
+function openHistory(){
+  $('ioBox').style.display = 'none';
+  histBox.style.display = 'block';
+  /* The panel head is sticky, so a sheet left part-scrolled would open this
+     underneath it and look like nothing happened. */
+  try{ sheet.scrollTop = 0; }catch(e){}
+  renderHistList();
+  if(!histLoaded && licKeyForSync()){
+    try{ syncNow().then(renderHistList); }catch(e){ renderHistList(); }
+  }
+}
+$('btnHistory').onclick = openHistory;
+$('btnHistClose').onclick = function(){ histBox.style.display = 'none'; };
+$('btnHistCancel').onclick = function(){ $('histPrev').style.display = 'none'; histPick = -1; };
+$('histList').onclick = function(e){
+  const b = e.target && e.target.closest ? e.target.closest('.histday') : null;
+  if(!b) return;
+  const i = +b.getAttribute('data-i');
+  const r = histRows[i];
+  if(!r) return;
+  histPick = i;
+  const d = histDiff(r.val);
+  let html = '<strong>' + hesc(histPretty(r.d)) + '</strong> — ' + hesc(cfgSummary(r.val)) + '<br><br>';
+  if(d.back.length) html += '<span style="color:#0DB14B">Comes back:</span><br>'
+    + d.back.map(hesc).join('<br>') + '<br><br>';
+  if(d.lose.length) html += '<span style="color:#C9234A">Goes away:</span><br>'
+    + d.lose.map(hesc).join('<br>') + '<br><br>';
+  if(!d.back.length && !d.lose.length) html += 'This day is the same as what you have now.<br><br>';
+  html += 'This changes every device in your family.';
+  $('histPrevBody').innerHTML = html;
+  $('histPrev').style.display = 'block';
+};
+/* Restoring goes through the SAME path a normal edit takes, so the per-child
+   rows and their timestamps are written too. A raw cfg overwrite would leave
+   the child rows stale, and the next pull would quietly undo the restore.   */
+function applyRestored(c){
+  const goneNow = [];
+  for(const k of cfg.kids){ if(!c.kids.some(function(x){ return x.id === k.id; })) goneNow.push(k.id); }
+  const keepGone = {};
+  for(const id in (cfg.gone || {})){
+    if(!c.kids.some(function(x){ return x.id === id; })) keepGone[id] = cfg.gone[id];
+  }
+  cfg = c; cfg.gone = keepGone;
+  for(const id of goneNow) tombstoneKid(id);
+  cfgSource = 'cloud'; cfgLocked = false; sharedCfgOK = null;
+  if(!cfg.kids.some(function(k){ return k.id === pKid; })) pKid = cfg.kids[0].id;
+  if(!cfg.kids.some(function(k){ return k.id === kid; })) kid = cfg.kids[0].id;
+  kidSig = {};                                  // every child re-stamps and syncs out
+  for(const k of cfg.kids) k.kts = 0;
+  tidy();
+  saveCfg();
+  clearTimeout(timer); timer = null; flush();
+  computeWeek(); renderPanel(); render();
+}
+$('btnHistGo').onclick = function(){
+  const r = histRows[histPick];
+  const msg = $('histMsg');
+  if(!r){ $('histPrev').style.display = 'none'; return; }
+  const before = JSON.stringify(cfg);
+  const beforeLabel = new Date().toISOString().slice(0,10);
+  let copy;
+  try{ copy = JSON.parse(JSON.stringify(r.val)); }catch(e){ copy = null; }
+  if(!copy || !copy.kids || !copy.kids.length){
+    msg.textContent = 'That day could not be read — nothing was changed.';
+    msg.style.color = '#C9234A'; return;
+  }
+  /* Snapshot first, so a restore is itself undoable. */
+  try{ localStorage.setItem(PRERESTORE, JSON.stringify({ts: Date.now(), body: before, label: beforeLabel})); }catch(e){}
+  applyRestored(copy);
+  histBox.style.display = 'block';
+  renderHistList();
+  msg.textContent = histPretty(r.d) + ' is back — ' + cfgSummary(cfg)
+    + '. Your other devices will catch up in a moment.';
+  msg.style.color = '#0DB14B';
+};
+$('btnHistUndo').onclick = function(){
+  const pre = preRestore(), msg = $('histMsg');
+  if(!pre){ renderHistList(); return; }
+  let copy;
+  try{ copy = JSON.parse(pre.body); }catch(e){ copy = null; }
+  if(!copy || !copy.kids || !copy.kids.length){
+    msg.textContent = 'The copy from before the restore could not be read — nothing was changed.';
+    msg.style.color = '#C9234A'; return;
+  }
+  try{ localStorage.removeItem(PRERESTORE); }catch(e){}
+  applyRestored(copy);
+  renderHistList();
+  msg.textContent = 'Put back the way it was — ' + cfgSummary(cfg) + '.';
+  msg.style.color = '#0DB14B';
+};
+
 let clearArmed=false;
 $('btnDefaults').onclick=()=>{
   const m=$('clearMsg');
@@ -2048,6 +2247,7 @@ async function syncNow(){
     const kidRows = [];
     const todayKey = new Date().toISOString().slice(0,10);
     let histToday = null;
+    const hist = [];
     applyingSync = true;
 
     for(const row of rows){
@@ -2072,7 +2272,15 @@ async function syncNow(){
          device still running the old single-blob build keeps working while
          the family is mixed.                                              */
       if(row.kind === 'kid'){ kidRows.push(row); continue; }
-      if(row.kind === 'cfghist'){ if(row.k === todayKey) histToday = row.val; continue; }
+      /* Every dated copy, not just today's. TASK-402 reads these back so a
+         parent can put a day back without anyone querying the store by hand. */
+      if(row.kind === 'cfghist'){
+        if(row.k === todayKey) histToday = row.val;
+        if(row.val && row.val.kids && row.val.kids.length){
+          hist.push({d: String(row.k), val: row.val, ms: row.updated_ms});
+        }
+        continue;
+      }
 
       const parts = String(row.k).split('|');
       if(parts.length !== 5) continue;
@@ -2116,6 +2324,9 @@ async function syncNow(){
       }
     }
     applyingSync = false;
+
+    hist.sort(function(a,b){ return a.d < b.d ? 1 : (a.d > b.d ? -1 : 0); });
+    histRows = hist; histLoaded = true;
 
     const pushes = [];
     /* Three things have to be true before this device is allowed to replace
