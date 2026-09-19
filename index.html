@@ -174,6 +174,16 @@ body{background:var(--paper);background-image:radial-gradient(var(--card) 1.5px,
 .icongrid-item.sel{border-color:#F37021;border-width:3px}
 .icongrid-item img{width:100%;height:100%;object-fit:contain;border-radius:6px}
 .icongrid-item.clear{font-family:var(--display);font-weight:800;color:var(--ink-soft);font-size:11px}
+.icongrid-item.request{width:auto;padding:3px 8px;font-family:var(--display);font-weight:800;color:#8A4A12;font-size:10.5px;line-height:1.25;text-align:center;background:#FFF4E8;border-color:#F37021}
+.iconrequest-form{position:absolute;z-index:20;top:calc(100% + 6px);left:0;width:min(320px,80vw);
+  background:#fff;border:3px solid var(--line);border-radius:14px;padding:12px;box-shadow:0 8px 24px rgba(20,10,40,.18)}
+.iconrequest-form textarea{width:100%;min-height:70px;font-family:var(--body);font-weight:600;font-size:12.5px;
+  border:2px solid #DDD8E6;border-radius:10px;padding:8px;color:var(--ink);resize:vertical;box-sizing:border-box}
+.iconrequest-form input[type=email]{width:100%;font-family:var(--body);font-weight:600;font-size:12.5px;
+  border:2px solid #DDD8E6;border-radius:10px;padding:7px 8px;color:var(--ink);margin-top:7px;box-sizing:border-box}
+.ireq-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:9px}
+.ireq-send{font-size:12.5px;padding:7px 16px}
+.ireq-send[disabled]{opacity:.35;cursor:default}
 .pnote{font-size:12.5px;color:var(--ink-soft);font-weight:600;line-height:1.5;margin:6px 0 0}
 .linknote{background:#FFF4E8;border:2px solid #F37021;color:#8A4A12;border-radius:10px;padding:8px 10px;margin-top:10px}
 .setrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:3px solid var(--line);border-radius:14px;
@@ -1092,6 +1102,9 @@ $('btnPrintClose').onclick=()=>$('printWrap').classList.remove('open');
 const sheet=$('sheet'), pBody=$('pBody');
 let pKid=null, openSecs={am:false,pm:false,bed:false,none:true}, linkNote='';
 let pIconOpenFor=null;
+let pRequestOpenFor=null;   // task id currently showing the "Request a picture" form
+let pRequestDraft={desc:'',email:''};
+let pRequestStatus=null;    // null | 'sent' | 'error'
 $('btnParent').onclick=()=>{ pKid=kid; sheet.classList.add('open'); renderPanel(); };
 $('btnClose').onclick=()=>{ sheet.classList.remove('open'); render(); };
 sheet.addEventListener('click',e=>{ if(e.target===sheet){ sheet.classList.remove('open'); render(); } });
@@ -1143,7 +1156,9 @@ function taskRow(t, secId, pos, count){
           ${pIconOpenFor===t.id ? `<div class="icongrid">
             <button type="button" class="icongrid-item clear" data-act="iconclear" title="No picture — use a star">No<br>picture</button>
             ${ICON_KEYS.map(k=>`<button type="button" class="icongrid-item${t.icon===k?' sel':''}" data-act="iconpick" data-icon="${esc(k)}" aria-pressed="${t.icon===k}" title="${esc(k)}"><img src="${ICON[k]}" alt="${esc(k)}"></button>`).join('')}
+            <button type="button" class="icongrid-item request" data-act="iconrequest" title="Don't see the picture you want? Ask for one to be added">✉️<br>Request<br>a picture</button>
           </div>` : ''}
+          ${pRequestOpenFor===t.id ? iconRequestForm(t) : ''}
         </div>
         ${multi?`<button class="mini" data-act="link" aria-pressed="${!!t.link}"
           style="${t.link?'border-color:#F37021;color:#F37021':''}" title="Share with ${shareWord()}">👫</button>`:''}
@@ -1167,6 +1182,21 @@ function taskRow(t, secId, pos, count){
         <span class="pnote commithint" style="margin:0">${readyToAdd(t)?'Ready — tap to put it on the checklist.':'Give this task a name, at least one day, and a time of day.'}</span></div>`:''}
       ${linkNote===t.id?`<p class="pnote linknote">Shared with ${shareWord()}. The details stay in step, but each child keeps their own order — move it where you want it on each child's tab.</p>`:''}
     </div>`;
+}
+
+function iconRequestForm(t){
+  const taskLabel = (t.t||'').trim() || '(this task — not yet named)';
+  return `<div class="iconrequest-form">
+    <p class="pnote" style="margin:0 0 6px">Describe the picture or activity you'd like added — for example, an image for mowing the lawn. Kathryn reads every request by hand and decides whether to add it; sending this does not add anything automatically, and there's no promised reply or timeline.</p>
+    <textarea class="ireq-desc" data-rf="desc" placeholder="What picture or activity would you like?" maxlength="400">${esc(pRequestDraft.desc||'')}</textarea>
+    <input type="email" class="ireq-email" data-rf="email" placeholder="Your email (optional — only if you'd like a reply)" value="${esc(pRequestDraft.email||'')}">
+    <div class="ireq-actions">
+      <button type="button" class="mini" data-act="iconrequestcancel">Cancel</button>
+      <button type="button" class="solid ireq-send" data-act="iconrequestsend" ${((pRequestDraft.desc||'').trim())?'':'disabled'}>Send request</button>
+    </div>
+    ${pRequestStatus==='sent' ? `<p class="pnote ireq-status" style="color:#0DB14B">Your email app should now be open with this request addressed to ${esc(BUY.email)} for "${esc(taskLabel)}" — send it from there to finish. If nothing opened, no email app is set up on this device: please email ${esc(BUY.email)} yourself with your description instead.</p>` : ''}
+    ${pRequestStatus==='error' ? `<p class="pnote ireq-status" style="color:#C9234A">Couldn't open an email app on this device. Please email ${esc(BUY.email)} directly with your description — nothing was sent automatically.</p>` : ''}
+  </div>`;
 }
 
 function renderPanel(){
@@ -1285,6 +1315,43 @@ pBody.addEventListener('click',e=>{
     saveCfg(); refreshCommit(row, hit[0]); renderPanel();
     return;
   }
+  if(act==='iconrequest'){
+    pIconOpenFor=null;
+    pRequestOpenFor=id;
+    pRequestDraft={desc:'',email:''};
+    pRequestStatus=null;
+    renderPanel();
+    return;
+  }
+  if(act==='iconrequestcancel'){
+    pRequestOpenFor=null;
+    pRequestStatus=null;
+    renderPanel();
+    return;
+  }
+  if(act==='iconrequestsend'){
+    const desc=(pRequestDraft.desc||'').trim();
+    if(!desc) return;
+    const taskLabel=(t.t||'').trim() || '(this task — not yet named)';
+    const subject='Muslim Kids Checklist — picture request';
+    const lines=[
+      'Task: '+taskLabel,
+      '',
+      'Request:',
+      desc,
+      '',
+      pRequestDraft.email ? ('Reply to: '+pRequestDraft.email) : '(no reply email given)'
+    ];
+    const mailto='mailto:'+BUY.email+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(lines.join('\n'));
+    try{
+      window.location.href=mailto;
+      pRequestStatus='sent';
+    }catch(e){
+      pRequestStatus='error';
+    }
+    renderPanel();
+    return;
+  }
 
   if(act==='link'){
     const on=!t.link;
@@ -1346,6 +1413,13 @@ pBody.addEventListener('click',e=>{
   saveCfg(); renderPanel();
 });
 pBody.addEventListener('input',e=>{
+  const rf=e.target.dataset.rf;
+  if(rf){
+    pRequestDraft[rf]=e.target.value;
+    const sendBtn=pBody.querySelector('.ireq-send');
+    if(sendBtn) sendBtn.disabled = !((pRequestDraft.desc||'').trim());
+    return;
+  }
   const f=e.target.dataset.f; if(!f) return;
   const row=e.target.closest('.trow');
   const hit=targets(row.dataset.id); if(!hit.length) return;
