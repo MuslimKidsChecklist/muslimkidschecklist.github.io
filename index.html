@@ -1201,14 +1201,14 @@ function taskRow(t, secId, pos, count){
 function iconRequestForm(t){
   const taskLabel = (t.t||'').trim() || '(this task — not yet named)';
   return `<div class="iconrequest-form">
-    <p class="pnote" style="margin:0 0 6px">Describe the picture or activity you'd like added — for example, an image for mowing the lawn. Kathryn reads every request by hand and decides whether to add it; sending this does not add anything automatically, and there's no promised reply or timeline.</p>
+    <p class="pnote" style="margin:0 0 6px">Describe the picture or activity you'd like added — for example, an image for mowing the lawn. We read every request by hand and decide whether to add it; sending this does not add anything automatically, and there's no promised reply or timeline.</p>
     <textarea class="ireq-desc" data-rf="desc" placeholder="What picture or activity would you like?" maxlength="400">${esc(pRequestDraft.desc||'')}</textarea>
     <input type="email" class="ireq-email" data-rf="email" placeholder="Your email (optional — only if you'd like a reply)" value="${esc(pRequestDraft.email||'')}">
     <div class="ireq-actions">
       <button type="button" class="mini" data-act="iconrequestcancel">Cancel</button>
       <button type="button" class="solid ireq-send" data-act="iconrequestsend" ${((pRequestDraft.desc||'').trim())?'':'disabled'}>Send request</button>
     </div>
-    ${pRequestStatus==='sent' ? `<p class="pnote ireq-status" style="color:#0DB14B">Your email app should now be open with this request addressed to ${esc(BUY.email)} for "${esc(taskLabel)}" — send it from there to finish. If nothing opened, no email app is set up on this device: please email ${esc(BUY.email)} yourself with your description instead.</p>` : ''}
+    ${pRequestStatus==='sent' ? `<p class="pnote ireq-status" style="color:#0DB14B">Your email app should now be open with this request addressed to ${esc(BUY.email)} for "${esc(taskLabel)}" — send it from there to finish. If nothing opened, no email app is set up on this device: please email ${esc(BUY.email)} with your description instead.</p>` : ''}
     ${pRequestStatus==='error' ? `<p class="pnote ireq-status" style="color:#C9234A">Couldn't open an email app on this device. Please email ${esc(BUY.email)} directly with your description — nothing was sent automatically.</p>` : ''}
   </div>`;
 }
