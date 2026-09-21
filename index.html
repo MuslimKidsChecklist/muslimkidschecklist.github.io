@@ -267,6 +267,8 @@ body{background:var(--paper);background-image:radial-gradient(var(--card) 1.5px,
 .gFoot a{color:var(--ink-soft)}
 .gFoot a.buyLink{color:#B57A00;font-weight:800;text-decoration:none}
 .gFoot a.buyLink:hover{text-decoration:underline}
+.gFoot a.signOutLink{text-decoration:underline;text-decoration-style:dotted}
+.gFoot a.signOutLink:hover{color:#C2354F}
 #trialBar{display:none;text-align:center;font-size:.85rem;padding:7px 12px;background:#FFF4D8;border-bottom:2px solid var(--line);color:#6b5a1f}
 #trialBar.on{display:block}
 #trialBar a{color:#6b5a1f;font-weight:700}
@@ -555,7 +557,16 @@ const SECTIONS = [
   {id:'bed', title:'Before Bed',               short:'bedtime',   ico:'🌙', when:'Every night',   accent:'var(--bed)',     soft:'#EDE9FD'}
 ];
 
-function defaults(){ return {"v": 4, "kids": [{"id": "kid1", "name": "Yusuf", "av": "🦖", "tint": "#DCF1FF", "tasks": [{"id": "makebed", "icon": "Make bed", "e": "🛏️", "t": "Make bed", "secs": ["am"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "amwudu", "icon": "Wudu", "e": "⭐", "t": "Make wudu", "secs": ["am"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "prfajr", "icon": "Pray Fajr", "e": "⭐", "t": "Pray Fajr", "secs": ["am"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "amteeth", "icon": "Teeth", "e": "🪥", "t": "Brush teeth", "secs": ["am"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "hair", "icon": "Hair", "e": "🪮", "t": "Brush hair", "secs": ["am"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "fasting", "icon": "Fasting", "e": "⭐", "t": "Fasting today", "sub": "Monday & Thursday", "secs": ["am"], "days": [1, 4]}, {"id": "pmwudu", "icon": "Wudu", "e": "⭐", "t": "Make wudu", "secs": ["pm"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "prdhuhr", "icon": "Pray Dhuhr", "e": "⭐", "t": "Pray Dhuhr", "secs": ["pm"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "prasr", "icon": "Pray Asr", "e": "⭐", "t": "Pray Asr", "secs": ["pm"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "lunch", "icon": "Lunch", "e": "🍱", "t": "Empty lunch box", "sub": "Leave by the sink", "secs": ["pm"], "days": [1, 2, 3, 4, 5]}, {"id": "water", "icon": "Water", "e": "💧", "t": "Fill water bottle", "secs": ["pm"], "days": [0, 1, 2, 3, 4]}, {"id": "vitamin", "icon": "Vitamin", "e": "💊", "t": "Take vitamin", "sub": "& change clothes", "secs": ["pm"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "quran", "icon": "Quran", "e": "📖", "t": "Read Qur'an", "secs": ["pm"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "arabic", "icon": "Spell Ar", "e": "✍️", "t": "Arabic spelling", "secs": ["pm"], "days": [1, 2, 3, 4]}, {"id": "math", "icon": "Math add", "e": "➕", "t": "Math homework", "secs": ["pm"], "days": [1, 2, 3, 4]}, {"id": "english", "icon": "English", "e": "📄", "t": "Reading", "sub": "1 page", "secs": ["pm"], "days": [1, 2, 3, 4]}, {"id": "packbag", "icon": "Pack bag", "e": "🎒", "t": "Pack backpack", "secs": ["pm"], "days": [0, 1, 2, 3, 4]}, {"id": "exercise", "icon": "Exercise", "e": "👟", "t": "Play outside", "secs": ["pm"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "laundry", "icon": "Laundry", "e": "🧺", "t": "Put away laundry", "secs": ["pm"], "days": [5]}, {"id": "vacuum", "icon": "Vacuum", "e": "🧹", "t": "Tidy your room", "secs": ["pm"], "days": [6]}, {"id": "bedwudu", "icon": "Wudu", "e": "⭐", "t": "Make wudu", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "prayspace", "icon": "Prepare the prayer space", "e": "⭐", "t": "Prepare the prayer space", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "prmaghrib", "icon": "Pray Maghrib", "e": "⭐", "t": "Pray Maghrib", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "prisha", "icon": "Pray Isha", "e": "⭐", "t": "Pray Isha", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "eveadhkar", "icon": "Evening Adhkar", "e": "⭐", "t": "Evening Adhkar", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "toys", "icon": "Toys", "e": "🧸", "t": "Clean up toys", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "pmtable", "icon": "Clean", "e": "🧽", "t": "Clear the table", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "trash", "icon": "Trash", "e": "🗑️", "t": "Take out the trash", "secs": ["bed"], "days": [1]}, {"id": "shower", "icon": "Shower", "e": "🚿", "t": "Shower", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "bedteeth", "icon": "Teeth", "e": "🪥", "t": "Brush teeth", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "potty", "icon": "Potty", "e": "🚽", "t": "Use the bathroom", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "duasleep", "icon": "Dua before sleep", "e": "⭐", "t": "Dua before sleep", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "inbed", "icon": "Bedtime", "e": "🌙", "t": "Be in bed", "sub": "by 8 pm", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}]}], "ts": 0, "wk": 0}; }
+/* TASK-016/340, 21 Sep 2026: the demo child's id used to be the fixed string
+   "kid1". Two families who both started from this unrenamed demo child and
+   later met (e.g. shared a device, or a bug briefly merged two accounts)
+   would collide on that id and merge into one record. Minting a random
+   suffix here, the same way addTask/addKid already do, makes every fresh
+   install's starting id unique without making ids sequential or counted
+   (see the caution about One Ayah's recycled-id failure in the sync-repair
+   card before changing this pattern). */
+function newDefaultKidId(){ return 'kid1_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function defaults(){ return {"v": 4, "kids": [{"id": newDefaultKidId(), "name": "Yusuf", "av": "🦖", "tint": "#DCF1FF", "tasks": [{"id": "makebed", "icon": "Make bed", "e": "🛏️", "t": "Make bed", "secs": ["am"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "amwudu", "icon": "Wudu", "e": "⭐", "t": "Make wudu", "secs": ["am"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "prfajr", "icon": "Pray Fajr", "e": "⭐", "t": "Pray Fajr", "secs": ["am"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "amteeth", "icon": "Teeth", "e": "🪥", "t": "Brush teeth", "secs": ["am"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "hair", "icon": "Hair", "e": "🪮", "t": "Brush hair", "secs": ["am"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "fasting", "icon": "Fasting", "e": "⭐", "t": "Fasting today", "sub": "Monday & Thursday", "secs": ["am"], "days": [1, 4]}, {"id": "pmwudu", "icon": "Wudu", "e": "⭐", "t": "Make wudu", "secs": ["pm"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "prdhuhr", "icon": "Pray Dhuhr", "e": "⭐", "t": "Pray Dhuhr", "secs": ["pm"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "prasr", "icon": "Pray Asr", "e": "⭐", "t": "Pray Asr", "secs": ["pm"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "lunch", "icon": "Lunch", "e": "🍱", "t": "Empty lunch box", "sub": "Leave by the sink", "secs": ["pm"], "days": [1, 2, 3, 4, 5]}, {"id": "water", "icon": "Water", "e": "💧", "t": "Fill water bottle", "secs": ["pm"], "days": [0, 1, 2, 3, 4]}, {"id": "vitamin", "icon": "Vitamin", "e": "💊", "t": "Take vitamin", "sub": "& change clothes", "secs": ["pm"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "quran", "icon": "Quran", "e": "📖", "t": "Read Qur'an", "secs": ["pm"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "arabic", "icon": "Spell Ar", "e": "✍️", "t": "Arabic spelling", "secs": ["pm"], "days": [1, 2, 3, 4]}, {"id": "math", "icon": "Math add", "e": "➕", "t": "Math homework", "secs": ["pm"], "days": [1, 2, 3, 4]}, {"id": "english", "icon": "English", "e": "📄", "t": "Reading", "sub": "1 page", "secs": ["pm"], "days": [1, 2, 3, 4]}, {"id": "packbag", "icon": "Pack bag", "e": "🎒", "t": "Pack backpack", "secs": ["pm"], "days": [0, 1, 2, 3, 4]}, {"id": "exercise", "icon": "Exercise", "e": "👟", "t": "Play outside", "secs": ["pm"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "laundry", "icon": "Laundry", "e": "🧺", "t": "Put away laundry", "secs": ["pm"], "days": [5]}, {"id": "vacuum", "icon": "Vacuum", "e": "🧹", "t": "Tidy your room", "secs": ["pm"], "days": [6]}, {"id": "bedwudu", "icon": "Wudu", "e": "⭐", "t": "Make wudu", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "prayspace", "icon": "Prepare the prayer space", "e": "⭐", "t": "Prepare the prayer space", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "prmaghrib", "icon": "Pray Maghrib", "e": "⭐", "t": "Pray Maghrib", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "prisha", "icon": "Pray Isha", "e": "⭐", "t": "Pray Isha", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "eveadhkar", "icon": "Evening Adhkar", "e": "⭐", "t": "Evening Adhkar", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "toys", "icon": "Toys", "e": "🧸", "t": "Clean up toys", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "pmtable", "icon": "Clean", "e": "🧽", "t": "Clear the table", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "trash", "icon": "Trash", "e": "🗑️", "t": "Take out the trash", "secs": ["bed"], "days": [1]}, {"id": "shower", "icon": "Shower", "e": "🚿", "t": "Shower", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "bedteeth", "icon": "Teeth", "e": "🪥", "t": "Brush teeth", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "potty", "icon": "Potty", "e": "🚽", "t": "Use the bathroom", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "duasleep", "icon": "Dua before sleep", "e": "⭐", "t": "Dua before sleep", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}, {"id": "inbed", "icon": "Bedtime", "e": "🌙", "t": "Be in bed", "sub": "by 8 pm", "secs": ["bed"], "days": [0, 1, 2, 3, 4, 5, 6]}]}], "ts": 0, "wk": 0}; }
 
 /* ---------- state ---------- */
 let cfg = defaults();
@@ -614,6 +625,12 @@ const ck = k => `week:${k}`;
 const MIN_GAP=6000;
 let lastWrite=0, timer=null, dirty=false, writing=false, syncOK=null, cfgDirty=false;
 let cfgSource='defaults', cfgLocked=false, sharedCfgOK=null;
+/* TASK-016/340, 21 Sep 2026: true for the sync pass just completed if this
+   device's config/per-child/history pushes were skipped by the mayPushCfg
+   guard (see syncNow). Read by setSync() so the status line stops claiming
+   "synced across devices" when the family's setup was in fact NOT sent —
+   the false positive the sync-repair card names as its biggest finding. */
+let cfgPushBlocked = false;
 
 const packWeek = w => JSON.stringify(Object.fromEntries(cfg.kids.map(k=>[k.id,[...(weeks[w][k.id]||[])]])));
 function unpack(raw){ const o=JSON.parse(raw); const r={}; for(const k in o) r[k]=new Set(o[k]||[]); return r; }
@@ -867,27 +884,43 @@ function onTrialOnly(){
   try{ const l=lread(LKEY); return !(l && l.key && !l.dead); }catch(e){ return false; }
 }
 /* The in-app footer. Per Universal Files/Buy-Now-Link-In-App.md this carries a
-   gold "Buy now" as the first item, and it renders ONLY during the free week —
-   never for a paid licence and never for a hand-issued access code. "Buy now"
-   at the bottom of an app somebody already paid for reads as a bug or a nag,
-   and code holders were given the app deliberately.
+   gold "Buy now" as the first item when someone is on the free trial — never
+   for a paid licence and never for a hand-issued access code, since "Buy now"
+   at the bottom of an app somebody already paid for reads as a bug or a nag.
 
-   Unlike One Ayah, this app had no footer at all before, so the whole row is
-   trial-only rather than always-on with a conditional link. Flip the early
-   return if the policy links should show for everyone. */
+   20 Sept 2026: matched to One Ayah's pattern — the row itself (site pages +
+   an easy sign out) is now ALWAYS on, whoever is looking at it; only the Buy
+   now link is conditional on `trial`. Previously the whole row was trial-only,
+   so a paying family never saw About/Contact/Privacy/Terms/Refunds, or any
+   way to sign out, without first opening Grown-ups. */
 function showAppFoot(trial){
   const f = document.getElementById('appFoot');
   if(!f) return;
-  if(!trial){ f.style.display='none'; f.innerHTML=''; return; }
-  const buy = buyHref('checkout');
+  const buy = trial ? buyHref('checkout') : null;
   const buyHtml = buy
     ? `<a class="buyLink" href="${buy.href}"${buy.ext?' target="_blank" rel="noopener"':''}>Buy now</a>`
     : '';
   f.innerHTML = buyHtml +
     '<a href="about.html">About</a> <a href="schools.html">Schools</a> <a href="contact.html">Contact</a> ' +
     '<a href="privacy.html">Privacy</a> <a href="terms.html">Terms</a> ' +
-    '<a href="refunds.html">Refunds</a>';
+    '<a href="refunds.html">Refunds</a> ' +
+    '<a href="#" id="footSignOut" class="signOutLink">Sign out</a>';
   f.style.display='';
+  /* Rebuilt every call, so (re)wire it every call too. Two taps to confirm,
+     same shape as the Grown-ups panel's Sign out button — never a confirm()
+     dialog, which iOS silently swallows for a Home Screen web app. */
+  const so = document.getElementById('footSignOut');
+  if(so) so.onclick = e=>{
+    e.preventDefault();
+    if(so.dataset.armed!=='1'){
+      so.dataset.armed='1';
+      so.textContent='Tap again to sign out';
+      setTimeout(()=>{ if(so.dataset.armed==='1'){ so.dataset.armed=''; so.textContent='Sign out'; } },4000);
+      return;
+    }
+    so.dataset.armed=''; so.textContent='Sign out';
+    signOut();
+  };
 }
 function setSync(m){
   const el=document.getElementById('sync'); if(!el) return;
@@ -899,6 +932,19 @@ function setSync(m){
     return;
   }
   if(rest) rest.style.display='';
+  /* TASK-016/340, 21 Sep 2026: a completed sync pass used to always land here
+     and print "Saved · synced across devices" once syncOK was true — even on
+     a pass where mayPushCfg refused to send the config/children/history,
+     because check rows still push and still set syncOK. A parent whose
+     children were never sent was told they were. cfgPushBlocked (set in
+     syncNow, next to mayPushCfg) makes this branch tell the truth instead;
+     it wins over the ordinary "saved" text but never over saving/syncing. */
+  if(m==='saved' && cfgPushBlocked){
+    el.textContent = '⚠︎ This device’s child list doesn’t sync — open Grown-ups and check it against your other devices, or Restore a backup.';
+    el.style.color = '#C9234A';
+    return;
+  }
+  el.style.color = '';
   el.textContent = m==='saving'?'Saving…' : m==='syncing'?'Checking…'
     : m==='queued'?'Saved here · sending shortly'
     : syncOK?'Saved · synced across devices':'Saved on this device';
@@ -1492,7 +1538,10 @@ $('btnAddKid').onclick=()=>{
   for(const k of cfg.kids) for(const t of k.tasks)
     if(t.link && !seen.has(t.id)){ seen.add(t.id);
       shared.push({...t, days:[...(t.days||[])], secs:[...(t.secs||[])]}); }
-  cfg.kids.push({id:'k'+Date.now().toString(36), name:'Child '+n, av:'🙂',
+  /* TASK-016/340, 21 Sep 2026: previously no random component here, unlike
+     addTask's two call sites (25 Aug fix). Two devices adding a child in the
+     same millisecond collided. Matches addTask's pattern; not sequential. */
+  cfg.kids.push({id:'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,7), name:'Child '+n, av:'🙂',
                  tint:tints[cfg.kids.length%tints.length], tasks:shared});
   pKid=cfg.kids[cfg.kids.length-1].id;
   saveCfg(); renderPanel(); render();
@@ -2462,6 +2511,11 @@ async function syncNow(){
     const cloudIds = new Set(((cloudCfg && cloudCfg.kids) || []).map(k => k.id));
     const sameFamily = cloudIds.size === 0 || cfg.kids.some(k => cloudIds.has(k.id));
     const mayPushCfg = cfgSource !== 'defaults' && sameFamily;
+    /* TASK-016/340: record the refusal so setSync() can tell the truth. Only
+       the config/per-child/history pushes are gated by mayPushCfg — check
+       rows always push below, regardless — so this device is never fully
+       offline when it is blocked, it just isn't sending its family setup. */
+    cfgPushBlocked = !mayPushCfg;
     if(mayPushCfg && (cfg.ts || 0) > (seen['cfg cfg'] || 0)){
       pushes.push(rpc('push_checklist', {p_fp: fp, p_kind: 'cfg', p_k: 'cfg',
         p_val: cfg, p_updated_ms: cfg.ts || Date.now()}));
@@ -2827,7 +2881,7 @@ function gateSwitch(){
 }
 
 function gateInit(){
-  showAppFoot(false);        // hidden by default on every path; only the trial branch turns it on
+  showAppFoot(false);        // always shown; the trial branch below turns the Buy now link on
   if(gateInit._sw===undefined) gateInit._sw=gateSwitch();
   if(gateInit._sw==='expired'){ $('trialBar').classList.remove('on'); showGate(screenExpired()); return; }
   const L=licState();
