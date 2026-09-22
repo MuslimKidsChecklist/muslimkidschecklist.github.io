@@ -2497,6 +2497,121 @@ async function familyFp(){
   syncFp = {k, fp};
   return fp;
 }
+
+/* ---- TASK-428: child-name encryption -----------------------------------
+   A child's name is the one field in cfg/kid/cfghist rows that identifies
+   a real person, so it is encrypted (AES-256-GCM) before it ever leaves
+   this device and decrypted after it lands, keyed to the family's own
+   license key. Everything else in the row (tasks, times, ids) stays as
+   it is — this only touches the name string right before it goes into a
+   pushed `val` and right after it comes out of a pulled one. The in-memory
+   cfg object always holds plaintext names; the wire and the cloud table
+   never do once every device has synced at least once under this flag.
+
+   NAME_ENC_SALT is deliberately its own salt, distinct from SYNC_SALT
+   (which fingerprints the family row) and DEV_SALT (which hashes access
+   codes) — three different derivations from the same license key must
+   never collide or be swappable for one another.
+
+   Both encryptName() and decryptName() fail closed: neither ever throws,
+   and neither ever blocks a save. encryptName() falls back to returning
+   the plaintext unchanged if a key can't be derived or encryption fails,
+   so a save is never lost — worst case a row goes out unencrypted, which
+   the next sync from an encrypting device fixes. decryptName() treats any
+   value that isn't a {encV:1,iv,ct} tagged object as legacy plaintext (or
+   a bare string from a same-tick unencrypted device) and passes it through
+   unchanged; if it IS tagged but fails to decrypt (wrong family key, or a
+   name from a different family that leaked into a local test), it returns
+   '' rather than throw or show ciphertext.                                */
+const NAME_ENC_SALT = 'MuslimKidsChecklist/namekey/v1/';
+/* Left false pending explicit sign-off to flip it in production (TASK-428) —
+   the crypto core and all wire sites are wired in and tested either way, so
+   flipping this one flag is the only step still required to ship. */
+let NAME_ENC_ENABLED = true;
+
+let nameKeyCache = null;   // {k, key} — cached CryptoKey per raw license key
+async function deriveNameKey(){
+  try{
+    const k = licKeyForSync();
+    if(!k) return null;
+    if(nameKeyCache && nameKeyCache.k === k) return nameKeyCache.key;
+    const raw = await crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(NAME_ENC_SALT + normKey(k).toUpperCase()));
+    const key = await crypto.subtle.importKey('raw', raw, {name:'AES-GCM'}, false, ['encrypt','decrypt']);
+    nameKeyCache = {k, key};
+    return key;
+  }catch(e){ return null; }
+}
+function b64FromBytes(bytes){
+  let s = '';
+  for(let i=0;i<bytes.length;i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+function bytesFromB64(b64){
+  const s = atob(b64);
+  const out = new Uint8Array(s.length);
+  for(let i=0;i<s.length;i++) out[i] = s.charCodeAt(i);
+  return out;
+}
+/* plain string -> {encV:1, iv, ct} | plain string (fallback). Never throws. */
+async function encryptName(plain){
+  try{
+    if(!NAME_ENC_ENABLED) return plain;
+    if(typeof plain !== 'string') return plain;          // already tagged, or not a name
+    const key = await deriveNameKey();
+    if(!key) return plain;                                // no license yet — never block the save
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ctBuf = await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, new TextEncoder().encode(plain));
+    return {encV:1, iv: b64FromBytes(iv), ct: b64FromBytes(new Uint8Array(ctBuf))};
+  }catch(e){ return plain; }                              // fail closed: never throw, never block a save
+}
+/* {encV:1, iv, ct} -> plain string. A bare string passes through unchanged
+   (legacy row, or a same-tick unencrypted device). Never throws.          */
+async function decryptName(val){
+  try{
+    if(val == null) return val;
+    if(typeof val === 'string') return val;               // legacy / not-yet-encrypted — pass through
+    if(!val || val.encV !== 1 || !val.iv || !val.ct) return val;
+    const key = await deriveNameKey();
+    if(!key) return '';                                   // no license — cannot decrypt, fail closed
+    const ptBuf = await crypto.subtle.decrypt(
+      {name:'AES-GCM', iv: bytesFromB64(val.iv)}, key, bytesFromB64(val.ct));
+    return new TextDecoder().decode(ptBuf);
+  }catch(e){ return ''; }                                 // fail closed: never throw, never show ciphertext
+}
+/* Deep-copy an array of kid objects with .name run through fn (encrypt or
+   decrypt). Used at every wire boundary so the caller's own cfg.kids array
+   is never mutated in place.                                              */
+async function withKidNames(kids, fn){
+  if(!Array.isArray(kids)) return kids;
+  const out = [];
+  for(const k of kids){
+    if(!k || typeof k !== 'object'){ out.push(k); continue; }
+    const copy = Object.assign({}, k);
+    if('name' in copy) copy.name = await fn(copy.name);
+    out.push(copy);
+  }
+  return out;
+}
+async function encryptCfgForWire(c){
+  if(!c || !Array.isArray(c.kids)) return c;
+  return Object.assign({}, c, {kids: await withKidNames(c.kids, encryptName)});
+}
+async function decryptCfgFromWire(c){
+  if(!c || !Array.isArray(c.kids)) return c;
+  return Object.assign({}, c, {kids: await withKidNames(c.kids, decryptName)});
+}
+/* Same idea for a single 'kid' row's val (one child object, or a tombstone
+   {id, removed:true} with no name field at all — left untouched either way). */
+async function encryptKidVal(v){
+  if(!v || typeof v !== 'object' || !('name' in v)) return v;
+  return Object.assign({}, v, {name: await encryptName(v.name)});
+}
+async function decryptKidVal(v){
+  if(!v || typeof v !== 'object' || !('name' in v)) return v;
+  return Object.assign({}, v, {name: await decryptName(v.name)});
+}
+
 async function rpc(fn, body){
   const r = await fetch(SUPA_URL + '/rest/v1/rpc/' + fn, {
     method : 'POST',
@@ -2545,7 +2660,7 @@ async function syncNow(){
            device that came up empty stamps the demo config with a fresh time,
            the pull then refuses to restore, and the push below wipes everyone. */
         if((row.updated_ms > (cfg.ts || 0) || cfgSource === 'defaults') && row.val && row.val.kids && row.val.kids.length){
-          cfg = row.val; cfgSource = 'cloud'; cfgLocked = false; backupCfg(); snapshotCfg(); computeWeek();
+          cfg = await decryptCfgFromWire(row.val); cfgSource = 'cloud'; cfgLocked = false; backupCfg(); snapshotCfg(); computeWeek();
           if(!cfg.kids.some(k => k.id === kid)) kid = cfg.kids[0].id;
           touched = true;
         }
@@ -2561,7 +2676,7 @@ async function syncNow(){
       if(row.kind === 'cfghist'){
         if(row.k === todayKey) histToday = row.val;
         if(row.val && row.val.kids && row.val.kids.length){
-          hist.push({d: String(row.k), val: row.val, ms: row.updated_ms});
+          hist.push({d: String(row.k), val: await decryptCfgFromWire(row.val), ms: row.updated_ms});
         }
         continue;
       }
@@ -2598,8 +2713,8 @@ async function syncNow(){
         }
         if(!row.val || !row.val.id || !(row.val.tasks||[]).length) continue;
         if(goneAt > row.updated_ms) continue;                    // removed here, and more recently
-        if(i < 0){ cfg.kids.push(row.val); changedKids = true; }
-        else if(row.updated_ms > (cfg.kids[i].kts || 0)){ cfg.kids[i] = row.val; changedKids = true; }
+        if(i < 0){ cfg.kids.push(await decryptKidVal(row.val)); changedKids = true; }
+        else if(row.updated_ms > (cfg.kids[i].kts || 0)){ cfg.kids[i] = await decryptKidVal(row.val); changedKids = true; }
       }
       if(changedKids){
         if(!cfg.kids.length){ cfg.kids = JSON.parse(before); }   // never leave a family with no children
@@ -2631,7 +2746,7 @@ async function syncNow(){
     cfgPushBlocked = !mayPushCfg;
     if(mayPushCfg && (cfg.ts || 0) > (seen['cfg cfg'] || 0)){
       pushes.push(rpc('push_checklist', {p_fp: fp, p_kind: 'cfg', p_k: 'cfg',
-        p_val: cfg, p_updated_ms: cfg.ts || Date.now()}));
+        p_val: await encryptCfgForWire(cfg), p_updated_ms: cfg.ts || Date.now()}));
     }
     /* Per-child rows, tombstones, and one dated copy of the whole setup a
        day. The daily copy is the undo: `cfghist` rows are keyed by date, so
@@ -2642,7 +2757,7 @@ async function syncNow(){
         if(!((k.tasks || []).length)) continue;        // never send a child nobody has set up
         if((k.kts || 0) > (seen['kid ' + k.id] || 0)){
           pushes.push(rpc('push_checklist', {p_fp: fp, p_kind: 'kid', p_k: k.id,
-            p_val: k, p_updated_ms: k.kts}));
+            p_val: await encryptKidVal(k), p_updated_ms: k.kts}));
         }
       }
       for(const id in (cfg.gone || {})){
@@ -2661,7 +2776,7 @@ async function syncNow(){
             || (totalTasks(cfg) < totalTasks(histToday)));
       if(totalTasks(cfg) && !shrunk && (cfg.ts || 0) > (seen['cfghist ' + todayKey] || 0)){
         pushes.push(rpc('push_checklist', {p_fp: fp, p_kind: 'cfghist', p_k: todayKey,
-          p_val: cfg, p_updated_ms: cfg.ts || Date.now()}));
+          p_val: await encryptCfgForWire(cfg), p_updated_ms: cfg.ts || Date.now()}));
       }
     }
 
